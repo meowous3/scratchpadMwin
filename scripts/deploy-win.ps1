@@ -75,6 +75,18 @@ if (-not (Test-Path "$nm\jsdom")) { throw "jsdom missing" }
 # melo's QML, the plugin engines' curated imports, fonts, presets
 Robo "$Root\src\qml" "$Out\melo-qml" @('/XF', '*.frag.in', 'common.glsl', 'build-shaders.sh')
 Robo "$Build\plugin-qml-imports" "$Out\plugin-qml-imports"
+# the import dir mirrors Qt's qml\ folder, debug builds included: drop each
+# <name>d.dll/.pdb whose release <name>.dll sits beside it
+Get-ChildItem "$Out\plugin-qml-imports" -Recurse -File -Include *.dll, *.pdb | ForEach-Object {
+  if ($_.BaseName -match '^(.+)d$' -and (Test-Path (Join-Path $_.DirectoryName "$($Matches[1]).dll"))) {
+    Remove-Item -Force $_.FullName
+  }
+}
+Get-ChildItem "$Out\plugin-qml-imports" -Recurse -File -Filter *.pdb | Remove-Item -Force
+# QtQuick.Shapes.DesignHelpers' plugin links a Qt library windeployqt skips,
+# since melo's own QML never imports it
+$qtBin = Split-Path (Get-Command windeployqt).Source
+Copy-Item -Force "$qtBin\Qt6QuickShapesDesignHelpers.dll" $Out
 Robo "$Root\assets\fonts" "$Out\fonts"
 Robo "$Root\vendor\presets" "$Out\presets"
 
