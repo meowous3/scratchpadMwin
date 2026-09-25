@@ -72,6 +72,24 @@ Copy-Item "$Root\vendor\ffmpeg\COPYING.LGPLv2.1" "$Out\ffmpeg-COPYING.LGPLv2.1"
 Copy-Item "$Root\LICENSE" $Out
 Robo "$Root\LICENSES" "$Out\LICENSES"
 
+# every DLL the shipped binaries import must be in dist\ or be a Windows
+# system DLL; the loader otherwise fails with 0xC0000135 and no message
+$have = @{}
+Get-ChildItem $Out -File -Filter *.dll | ForEach-Object { $have[$_.Name.ToLower()] = $true }
+$missing = @{}
+$bins = @(Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.exe', '.dll' }) +
+        @(Get-ChildItem "$Out\gst-plugins", "$Out\gio-modules" -File -Filter *.dll)
+foreach ($b in $bins) {
+  $deps = & dumpbin /nologo /dependents $b.FullName | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } |
+    ForEach-Object { $_.Trim().ToLower() }
+  foreach ($d in $deps) {
+    if ($d -like 'api-ms-win-*' -or $d -like 'ext-ms-*' -or $have[$d]) { continue }
+    if (Test-Path "$env:SystemRoot\System32\$d") { continue }
+    $missing["$d (needed by $($b.Name))"] = $true
+  }
+}
+if ($missing.Count) { throw "dist is missing DLLs:`n  $($missing.Keys -join "`n  ")" }
+
 foreach ($f in 'melo.exe', 'node.exe', 'ffmpeg.exe', 'gst-plugin-scanner.exe', 'vcruntime140.dll',
                'sidecar\melo-sidecar.mjs', 'melo-qml\Main.qml',
                'plugin-qml-imports\QtQuick\qmldir', 'gst-plugins\gstwasapi2.dll') {

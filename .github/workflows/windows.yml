@@ -232,8 +232,10 @@ jobs:
           } finally {
             Rename-Item 'C:\gstreamer-hidden' 'C:\gstreamer'
           }
-          $log = Get-Content -Raw "$env:RUNNER_TEMP\packaged.log"
+          # -Raw returns $null for an empty file, and $null -notmatch is not $true
+          $log = [string](Get-Content -Raw "$env:RUNNER_TEMP\packaged.log")
           $log
+          "exit code: $($p.ExitCode)"
           if ($log -notmatch '\[melo\] ui ready') { throw "packaged UI did not load" }
           if ($log -notmatch '\[sidecar\]') { throw "packaged sidecar did not start" }
           if ($log -match 'missing GStreamer elements') { throw "packaged GStreamer incomplete" }
