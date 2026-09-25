@@ -1,6 +1,7 @@
 // WindowController members that are plain Qt on every platform. The
 // compositor-specific rest lives in WindowController_kwin.cpp / _win.cpp.
 #include "WindowController.h"
+#include "FileUrl.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -43,3 +44,5 @@ void WindowController::logLine(const QString& text) {
 void WindowController::copyToClipboard(const QString& text) {
     if (auto* cb = QGuiApplication::clipboard()) cb->setText(text);
 }
+
+QString WindowController::fileUrl(const QString& path) const { return meloFileUrl(path); }

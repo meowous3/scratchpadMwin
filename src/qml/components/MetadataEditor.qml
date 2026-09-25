@@ -87,7 +87,7 @@ Window {
     }
 
     function localArt(sub, f) {
-        return "file://" + Settings.downloadPath + "/" + sub + "/" + f
+        return WindowCtl.fileUrl(Settings.downloadPath + "/" + sub + "/" + f)
     }
     function artUrl() {
         if (!track) return ""

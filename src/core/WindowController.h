@@ -115,6 +115,9 @@ public:
     // desktop integration, same as the rest of this object: QML has no
     // clipboard type of its own
     Q_INVOKABLE void copyToClipboard(const QString& text);
+    // A local path as a file URL (FileUrl.h): QML building "file://" + path
+    // makes the drive letter a host on Windows.
+    Q_INVOKABLE QString fileUrl(const QString& path) const;
 
     // QML console.log is a no-op on builds where Qt's debug output is
     // compiled out — which is every Qt app on some distributions, and is why

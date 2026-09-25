@@ -1200,7 +1200,7 @@ Window {
                         function onPicked(tag, paths) {
                             if (tag !== "picker-image" || paths.length === 0) return
                             const p = String(paths[0])
-                            picker.stSrc = p.startsWith("file:") ? p : "file://" + p
+                            picker.stSrc = p.startsWith("file:") ? p : WindowCtl.fileUrl(p)
                             picker.livePreview()
                         }
                     }

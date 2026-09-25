@@ -1083,6 +1083,11 @@ if(Qt6Test_FOUND)
     target_link_libraries(tst_interceptmap PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME interceptmap COMMAND tst_interceptmap)
 
+    add_executable(tst_fileurl tests/cpp/tst_fileurl.cpp src/core/FileUrl.h)
+    target_include_directories(tst_fileurl PRIVATE src/core)
+    target_link_libraries(tst_fileurl PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME fileurl COMMAND tst_fileurl)
+
     # Every test gets a TIMEOUT (ctest default: 1500s) because the failure mode
     # is a hang, e.g. a fifo opened without O_NONBLOCK (MeloUiArchives.cpp),
     # which no in-test timing assertion can catch. Values are generous multiples
@@ -1111,6 +1116,7 @@ if(Qt6Test_FOUND)
     # (QTEST_MAIN + Qt6::Gui); no PluginWindowHost, no live windows.
     set_tests_properties(commandmap        PROPERTIES TIMEOUT 30)
     set_tests_properties(interceptmap      PROPERTIES TIMEOUT 30)
+    set_tests_properties(fileurl           PROPERTIES TIMEOUT 30)
     # gstreamer builds a real pipeline; slower, and slower again on a cold runner
     set_tests_properties(audioengine       PROPERTIES TIMEOUT 120)
     set_tests_properties(eqsync            PROPERTIES TIMEOUT 120)

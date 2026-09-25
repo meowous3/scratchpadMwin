@@ -4001,7 +4001,7 @@ Window {
                     desc: win.pluginList.length === 0 ? "No plugins" : ""
                     SBtn { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                            label: "Open folder"
-                           onClicked: Qt.openUrlExternally("file://" + Settings.dataDir + "/plugins") }
+                           onClicked: Qt.openUrlExternally(WindowCtl.fileUrl(Settings.dataDir + "/plugins")) }
                 }
                 Repeater {
                     model: win.tab === "plugins" ? win.pluginList : []
@@ -4217,9 +4217,9 @@ Window {
                                 anchors.verticalCenter: parent.verticalCenter
                                 label: "Open folder"
                                 onClicked: {
-                                    Qt.openUrlExternally("file://" + Settings.dataDir
+                                    Qt.openUrlExternally(WindowCtl.fileUrl(Settings.dataDir
                                         + "/plugin-data/" + win.pluginSettingsFor
-                                        + "/" + (pluginField.modelData.dir || ""))
+                                        + "/" + (pluginField.modelData.dir || "")))
                                     win.fetchPluginSettingFiles(pluginField.modelData.key)
                                 }
                             }
@@ -4309,8 +4309,8 @@ Window {
     Connections {
         target: Portal
         function onPicked(tag, paths) {
-            if (tag === "shape-image" && paths.length) win.shapeWith("image", "file://" + paths[0])
-            else if (tag === "settings-bg") win.setBg({ src: "file://" + paths[0] })
+            if (tag === "shape-image" && paths.length) win.shapeWith("image", WindowCtl.fileUrl(paths[0]))
+            else if (tag === "settings-bg") win.setBg({ src: WindowCtl.fileUrl(paths[0]) })
             else if (tag === "settings-import" && paths.length)
                 win.importPaths(paths)
             else if (tag === "theme-export" && paths.length)
