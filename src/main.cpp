@@ -31,6 +31,12 @@
 #include <gst/gst.h>
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <io.h>
+#include <stdlib.h>
+// UTF-16 all the way: qputenv's local-8-bit value mangles non-ANSI paths.
+static void setEnvW(const wchar_t* name, const QString& value) {
+    _wputenv_s(name, qUtf16Printable(QDir::toNativeSeparators(value)));
+}
 #endif
 
 #include "VisualizerItem.h"
@@ -215,39 +221,57 @@ int main(int argc, char** argv) {
         wchar_t exePath[MAX_PATH];
         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
         const QString exeDir = QFileInfo(QString::fromWCharArray(exePath)).absolutePath();
-        if (QDir(exeDir + "/gst-plugins").exists()) {
-            qputenv("GST_PLUGIN_PATH", QDir::toNativeSeparators(exeDir + "/gst-plugins").toLocal8Bit());
-            // Only the bundled plugins: a system-wide GStreamer of another
-            // version would otherwise load into the same process.
-            qputenv("GST_PLUGIN_SYSTEM_PATH_1_0", "");
-        }
-        if (QFileInfo::exists(exeDir + "/gst-plugin-scanner.exe"))
-            qputenv("GST_PLUGIN_SCANNER",
-                    QDir::toNativeSeparators(exeDir + "/gst-plugin-scanner.exe").toLocal8Bit());
-        if (QDir(exeDir + "/gio-modules").exists())
-            qputenv("GIO_EXTRA_MODULES", QDir::toNativeSeparators(exeDir + "/gio-modules").toLocal8Bit());
 
-        // The config dir must be writable: settings, library and the log
-        // below live there. A portable folder under Program Files is not.
+        // The config dir must be writable: settings, library, the GStreamer
+        // registry and the log below live there. A portable folder under
+        // Program Files is not.
         const QString cfg = meloConfigDirFrom(exeDir);
         QDir().mkpath(cfg);
         QFile probe(cfg + "/.melo-write-test");
         if (!probe.open(QIODevice::WriteOnly)) {
-            const std::wstring msg = L"melo can't write to "
-                + QDir::toNativeSeparators(cfg).toStdWString()
-                + L"\n\nMove the melo folder somewhere you can write to, such as Documents.";
+            std::wstring msg = L"melo can't write to " + QDir::toNativeSeparators(cfg).toStdWString();
+            if (QFileInfo::exists(exeDir + "/portable"))
+                msg += L"\n\nMove the melo folder somewhere you can write to, such as Documents.";
             MessageBoxW(nullptr, msg.c_str(), L"melo", MB_ICONERROR);
             return 1;
         }
         probe.close();
         probe.remove();
 
+        const QString bundledPlugins = exeDir + "/gst-plugins";
+        if (QDir(bundledPlugins).exists()) {
+            // Only the bundled plugins: a system-wide GStreamer of another
+            // version would otherwise load into the same process. The _1_0
+            // names win over the unsuffixed ones, so set both. An empty
+            // system path can't be used: qputenv/_wputenv_s with "" removes
+            // the variable on Windows, and GStreamer then falls back to its
+            // default system dirs.
+            setEnvW(L"GST_PLUGIN_PATH", bundledPlugins);
+            setEnvW(L"GST_PLUGIN_PATH_1_0", bundledPlugins);
+            setEnvW(L"GST_PLUGIN_SYSTEM_PATH_1_0", bundledPlugins);
+            // Own registry, not shared with a system GStreamer's cache.
+            setEnvW(L"GST_REGISTRY_1_0", cfg + "/gst-registry.bin");
+        }
+        if (QFileInfo::exists(exeDir + "/gst-plugin-scanner.exe"))
+            setEnvW(L"GST_PLUGIN_SCANNER", exeDir + "/gst-plugin-scanner.exe");
+        if (QDir(exeDir + "/gio-modules").exists())
+            setEnvW(L"GIO_EXTRA_MODULES", exeDir + "/gio-modules");
+
         // GUI subsystem: stderr goes nowhere unless the launcher redirected
-        // it (CI does). Otherwise keep the last run in <config>/melo.log.
+        // it (CI does). Otherwise log to <config>/melo.log. Rotate first
+        // rather than truncating: a second launch (which exits at the
+        // single-instance lock later) must not wipe the running instance's
+        // log — the move fails harmlessly while that instance holds it open.
         const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
         if (err == nullptr || err == INVALID_HANDLE_VALUE) {
-            if (_wfreopen((cfg + "/melo.log").toStdWString().c_str(), L"w", stderr))
+            const std::wstring log = QDir::toNativeSeparators(cfg + "/melo.log").toStdWString();
+            const std::wstring old = log + L".old";
+            MoveFileExW(log.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING);
+            if (_wfreopen(log.c_str(), L"a", stderr)) {
                 setvbuf(stderr, nullptr, _IONBF, 0);
+                // DLLs writing through the Win32 handle land in the log too.
+                SetStdHandle(STD_ERROR_HANDLE, reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(stderr))));
+            }
         }
         // Qt writes to the debugger (OutputDebugString) in a GUI app without this
         if (!qEnvironmentVariableIsSet("QT_FORCE_STDERR_LOGGING"))
