@@ -224,12 +224,16 @@ jobs:
           New-Item -ItemType Directory -Force $cfg | Out-Null
           $env:MELO_CONFIG_DIR = $cfg
           $env:QT_QPA_PLATFORM = 'offscreen'
+          # offscreen is test-only: present in dist\ for this run, never in
+          # the installer or zip
+          $offscreen = Join-Path (Split-Path (Get-Command windeployqt).Source) "..\plugins\platforms\qoffscreen.dll"
           # hide the build machine's tools so only dist\ can satisfy lookups
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           # a missing DLL or a crash fails the process instead of opening a
           # modal loader/WER dialog that nobody can dismiss; children inherit it
           Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint m);'
           [W.K]::SetErrorMode(0x8003) | Out-Null
+          Copy-Item $offscreen dist\platforms\
           Rename-Item 'C:\gstreamer' 'C:\gstreamer-hidden'
           try {
             $p = Start-Process -PassThru -NoNewWindow dist\melo.exe -ArgumentList '--smoke' `
@@ -243,6 +247,7 @@ jobs:
             }
           } finally {
             Rename-Item 'C:\gstreamer-hidden' 'C:\gstreamer'
+            Remove-Item dist\platforms\qoffscreen.dll
           }
           # -Raw returns $null for an empty file, and $null -notmatch is not $true
           $log = [string](Get-Content -Raw "$env:RUNNER_TEMP\packaged.log")
