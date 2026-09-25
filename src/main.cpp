@@ -253,10 +253,27 @@ int main(int argc, char** argv) {
             // Own registry, not shared with a system GStreamer's cache.
             setEnvW(L"GST_REGISTRY_1_0", cfg + "/gst-registry.bin");
         }
-        if (QFileInfo::exists(exeDir + "/gst-plugin-scanner.exe"))
+        if (QFileInfo::exists(exeDir + "/gst-plugin-scanner.exe")) {
+            // like the plugin paths, the _1_0 name wins when both are set
             setEnvW(L"GST_PLUGIN_SCANNER", exeDir + "/gst-plugin-scanner.exe");
+            setEnvW(L"GST_PLUGIN_SCANNER_1_0", exeDir + "/gst-plugin-scanner.exe");
+        }
         if (QDir(exeDir + "/gio-modules").exists())
             setEnvW(L"GIO_EXTRA_MODULES", exeDir + "/gio-modules");
+
+        // Portable: nothing in %LOCALAPPDATA%\melo. Qt keeps the QML disk
+        // cache and the Qt Quick pipeline cache under CacheLocation by default.
+        // The pipeline cache env vars (QSG_RHI_PIPELINE_CACHE_SAVE) apply to
+        // every window at once and melo opens several, so the automatic cache
+        // is switched off (QT_DISABLE_SHADER_DISK_CACHE, QQuickGraphicsConfiguration
+        // docs) rather than redirected; Qt Quick's own 2D shaders ship
+        // precompiled, so D3D11 loses next to nothing.
+        if (QFileInfo::exists(exeDir + "/portable")) {
+            if (!qEnvironmentVariableIsSet("QML_DISK_CACHE_PATH"))
+                setEnvW(L"QML_DISK_CACHE_PATH", cfg + "/qmlcache");
+            if (!qEnvironmentVariableIsSet("QT_DISABLE_SHADER_DISK_CACHE"))
+                qputenv("QT_DISABLE_SHADER_DISK_CACHE", "1");
+        }
 
         // GUI subsystem: stderr goes nowhere unless the launcher redirected
         // it (CI does). Otherwise log to <config>/melo.log. Rotate first

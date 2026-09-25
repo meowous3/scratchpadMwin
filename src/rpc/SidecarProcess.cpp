@@ -114,6 +114,20 @@ void SidecarProcess::start() {
         return;
     }
     if (bundle.isEmpty() || !QFileInfo::exists(bundle)) {
+#ifdef Q_OS_WIN
+        // A packaged melo has no source tree, so the pnpm hint means nothing there.
+        bool devTree = !qEnvironmentVariableIsEmpty("MELO_SIDECAR");
+#ifdef MELO_DEV_SIDECAR
+        devTree = devTree || QFileInfo::exists(
+            QFileInfo(QStringLiteral(MELO_DEV_SIDECAR)).absolutePath() + "/../package.json");
+#endif
+        if (!devTree) {
+            emit permanentlyFailed("melo's sidecar is missing from " +
+                                   QDir::toNativeSeparators(QCoreApplication::applicationDirPath() + "/sidecar") +
+                                   ". Reinstall melo.");
+            return;
+        }
+#endif
         emit permanentlyFailed("sidecar bundle not found: " + bundle +
                                " (run: pnpm -C sidecar build)");
         return;

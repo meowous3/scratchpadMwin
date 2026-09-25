@@ -131,6 +131,21 @@ QString runSave(const QString& title, const QString& suggestedName,
     return itemPath(item.Get());
 }
 
+// Show() runs a nested event loop, so a second request can arrive while a
+// dialog is up; a second modal on the same owner would stack under it.
+bool g_dialogShowing = false;
+
+struct ShowingGuard {
+    ShowingGuard() { g_dialogShowing = true; }
+    ~ShowingGuard() { g_dialogShowing = false; }
+};
+
+bool refuseWhileShowing(const QString& tag) {
+    if (!g_dialogShowing) return false;
+    std::fprintf(stderr, "[portal] file dialog already open; cancelled %s\n", qPrintable(tag));
+    return true;
+}
+
 }  // namespace
 
 PortalDialog::PortalDialog(QObject* parent) : QObject(parent) {}
@@ -141,6 +156,8 @@ void PortalDialog::openFile(const QString& tag, const QString& title,
                             const QString& filterName, const QStringList& patterns,
                             bool multiple) {
     QTimer::singleShot(0, this, [=] {
+        if (refuseWhileShowing(tag)) { emit cancelled(tag); return; }
+        const ShowingGuard showing;
         const QStringList paths = runOpen(title, filterName, patterns, multiple);
         if (paths.isEmpty()) emit cancelled(tag);
         else emit picked(tag, paths);
@@ -151,6 +168,8 @@ void PortalDialog::saveFile(const QString& tag, const QString& title,
                             const QString& suggestedName, const QString& filterName,
                             const QStringList& patterns) {
     QTimer::singleShot(0, this, [=] {
+        if (refuseWhileShowing(tag)) { emit cancelled(tag); return; }
+        const ShowingGuard showing;
         const QString path = runSave(title, suggestedName, filterName, patterns);
         if (path.isEmpty()) emit cancelled(tag);
         else emit picked(tag, {path});
