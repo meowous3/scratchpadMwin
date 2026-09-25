@@ -687,6 +687,11 @@ if(Qt6Test_FOUND)
     target_link_libraries(tst_paths PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME paths COMMAND tst_paths)
 
+    add_executable(tst_portalfilter tests/cpp/tst_portalfilter.cpp src/core/PortalFilter.h)
+    target_include_directories(tst_portalfilter PRIVATE src/core)
+    target_link_libraries(tst_portalfilter PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME portalfilter COMMAND tst_portalfilter)
+
     # Who gets to switch the FFT on: SpectrumSource alone, Qt6::Core only. The
     # host side of the wiring is asserted in tst_windowsnap.
     add_executable(tst_spectrumarbiter
