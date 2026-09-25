@@ -43,6 +43,8 @@ Copy-Item -Force "$VcpkgBin\glew32.dll" $Out
 Copy-Item -Force "$GstRoot\bin\*.dll" $Out
 New-Item -ItemType Directory "$Out\gst-plugins", "$Out\gio-modules" | Out-Null
 Copy-Item "$GstRoot\lib\gstreamer-1.0\*.dll" "$Out\gst-plugins"
+# the python loader needs a system python39.dll; melo uses no python elements
+Remove-Item "$Out\gst-plugins\gstpython.dll" -ErrorAction SilentlyContinue
 Copy-Item "$GstRoot\lib\gio\modules\*.dll" "$Out\gio-modules"
 Copy-Item "$GstRoot\libexec\gstreamer-1.0\gst-plugin-scanner.exe" $Out
 
@@ -85,7 +87,9 @@ foreach ($b in $bins) {
   foreach ($d in $deps) {
     if ($d -like 'api-ms-win-*' -or $d -like 'ext-ms-*' -or $have[$d]) { continue }
     if (Test-Path "$env:SystemRoot\System32\$d") { continue }
-    $missing["$d (needed by $($b.Name))"] = $true
+    $where = @(& where.exe $d 2>$null) + @(Get-ChildItem $GstRoot -Recurse -File -Filter $d -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    $global:LASTEXITCODE = 0
+    $missing["$d (needed by $($b.Name); found at: $($where -join ', '))"] = $true
   }
 }
 if ($missing.Count) { throw "dist is missing DLLs:`n  $($missing.Keys -join "`n  ")" }

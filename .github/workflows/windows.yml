@@ -210,7 +210,9 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "QML errors on startup (exit $($p.ExitCode))" }
 
       - name: Deploy
-        run: ./scripts/deploy-win.ps1
+        run: |
+          Select-String -Path build\CMakeCache.txt -Pattern '^ZLIB_' | ForEach-Object Line
+          ./scripts/deploy-win.ps1
 
       # the packaged layout, with nothing from the build tree: proves the
       # beside-melo.exe lookups for QML, node, the sidecar and GStreamer.
