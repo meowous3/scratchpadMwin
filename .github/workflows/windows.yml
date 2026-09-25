@@ -218,6 +218,7 @@ jobs:
       # satisfy anything; gst-registry.bin in the config dir proves main.cpp's
       # GStreamer environment took effect.
       - name: Packaged build starts
+        timeout-minutes: 10
         run: |
           $cfg = "$env:RUNNER_TEMP\melo-packaged"
           New-Item -ItemType Directory -Force $cfg | Out-Null
@@ -225,10 +226,21 @@ jobs:
           $env:QT_QPA_PLATFORM = 'offscreen'
           # hide the build machine's tools so only dist\ can satisfy lookups
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          # a missing DLL or a crash fails the process instead of opening a
+          # modal loader/WER dialog that nobody can dismiss; children inherit it
+          Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint m);'
+          [W.K]::SetErrorMode(0x8003) | Out-Null
           Rename-Item 'C:\gstreamer' 'C:\gstreamer-hidden'
           try {
-            $p = Start-Process -Wait -PassThru -NoNewWindow dist\melo.exe -ArgumentList '--smoke' `
+            $p = Start-Process -PassThru -NoNewWindow dist\melo.exe -ArgumentList '--smoke' `
                    -RedirectStandardError "$env:RUNNER_TEMP\packaged.log"
+            if (-not $p.WaitForExit(180000)) {
+              Get-Process | Where-Object { $_.Path -like "$env:GITHUB_WORKSPACE\dist\*" } |
+                Format-Table Id, ProcessName, StartTime | Out-String | Write-Host
+              Get-Process | Where-Object { $_.Path -like "$env:GITHUB_WORKSPACE\dist\*" } | Stop-Process -Force
+              Get-Content "$env:RUNNER_TEMP\packaged.log" -ErrorAction SilentlyContinue
+              throw "packaged melo.exe did not exit within 180 s"
+            }
           } finally {
             Rename-Item 'C:\gstreamer-hidden' 'C:\gstreamer'
           }

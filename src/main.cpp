@@ -232,7 +232,8 @@ int main(int argc, char** argv) {
             std::wstring msg = L"melo can't write to " + QDir::toNativeSeparators(cfg).toStdWString();
             if (QFileInfo::exists(exeDir + "/portable"))
                 msg += L"\n\nMove the melo folder somewhere you can write to, such as Documents.";
-            MessageBoxW(nullptr, msg.c_str(), L"melo", MB_ICONERROR);
+            // --smoke runs unattended in CI: a modal box would hang the job
+            if (!smoke) MessageBoxW(nullptr, msg.c_str(), L"melo", MB_ICONERROR);
             return 1;
         }
         probe.close();
@@ -399,7 +400,7 @@ int main(int argc, char** argv) {
                      "[melo] set MELO_CONFIG_DIR to run a second instance against its own files\n",
                      static_cast<long long>(pid), qPrintable(meloConfigDir()));
 #ifdef Q_OS_WIN
-        MessageBoxW(nullptr, L"melo is already running.", L"melo", MB_ICONINFORMATION);
+        if (!smoke) MessageBoxW(nullptr, L"melo is already running.", L"melo", MB_ICONINFORMATION);
 #endif
         return 0;
     }
@@ -646,7 +647,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "[melo]   %s\n", qPrintable(e.toString()));
 #ifdef Q_OS_WIN
         // GUI-subsystem app: stderr is invisible — surface the fatal visibly
-        MessageBoxW(nullptr,
+        if (!smoke) MessageBoxW(nullptr,
                     L"melo failed to load its UI (qml folder missing beside melo.exe?)",
                     L"melo", MB_ICONERROR);
 #endif
