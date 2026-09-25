@@ -10,11 +10,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT MSVC)
   add_compile_options(-Wall -Wextra)
 endif()
+if(MSVC)
+  # UTF-8 source literals; M_PI from <cmath>; no min/max macros from <windows.h>
+  add_compile_options(/utf-8)
+  add_compile_definitions(_USE_MATH_DEFINES NOMINMAX)
+endif()
 
 # 6.5 is the minimum: QtQuick.Effects (MultiEffect) and
 # QStyleHints::colorSchemeChanged both landed in 6.5 and have no fallback here.
 # CI and the release builds use 6.11.2.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick OpenGL DBus Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick OpenGL Network)
+# D-Bus carries MPRIS, the XDG file portal and the KWin scripts: Linux only.
+if(UNIX AND NOT APPLE)
+    find_package(Qt6 REQUIRED COMPONENTS DBus)
+    set(MELO_DBUS_LIB Qt6::DBus)
+else()
+    set(MELO_DBUS_LIB "")
+endif()
 # QuickPrivate exposes needsChildWindowStackingOrderUpdate, which arms Qt's
 # whole-tree walk for QQuickWindowContainers (StackingWalkSuppressor, main.cpp):
 # skipping it is 2.8x fewer late frames per pixel scrolled. Optional.
@@ -127,21 +139,19 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(WIN32)
-    # GStreamer + projectM come from vcpkg (toolchain file passed by CI).
-    # projectM's own CMake package (built + installed in CI with the
-    # caller-FBO patch applied) exports projectM::projectM / ::playlist.
-    find_package(unofficial-gstreamer CONFIG QUIET)      # vcpkg port name
-    find_package(PkgConfig)                              # vcpkg also ships .pc for gstreamer
-    if(PkgConfig_FOUND)
-        pkg_check_modules(GST REQUIRED IMPORTED_TARGET
-            gstreamer-1.0 gstreamer-app-1.0 gstreamer-audio-1.0 gstreamer-pbutils-1.0)
-        set(MELO_GST_LIB PkgConfig::GST)
-    endif()
+    # GStreamer: the official MSVC installer (CI) or vcpkg, both found through
+    # the pkg-config each ships. projectM: scripts/setup-vendor-win.ps1.
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GST REQUIRED IMPORTED_TARGET
+        gstreamer-1.0 gstreamer-app-1.0 gstreamer-audio-1.0 gstreamer-pbutils-1.0)
+    set(MELO_GST_LIB PkgConfig::GST)
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/vendor/projectm4")
     # projectM4 + its playlist are SEPARATE CMake packages; targets are
     # namespaced libprojectM:: (verified from the installed projectM4Config)
     find_package(projectM4 CONFIG REQUIRED)
     find_package(projectM4Playlist CONFIG REQUIRED)
-    set(MELO_MEDIA_LIBS ${MELO_GST_LIB} libprojectM::projectM libprojectM::playlist)
+    set(MELO_PM_LIBS libprojectM::projectM libprojectM::playlist)
+    set(MELO_MEDIA_LIBS ${MELO_GST_LIB} ${MELO_PM_LIBS})
 endif()
 
 if(WIN32)
@@ -169,8 +179,6 @@ qt_add_executable(melo
     src/core/ThemeFormat.cpp
     src/core/LibraryStore.cpp
     src/core/JsonRowModel.h
-    src/core/MprisService.cpp
-    src/core/PortalDialog.cpp
     ${MELO_WINDOWCTL}
     src/core/WindowController.h
     src/core/Track.h
@@ -215,6 +223,12 @@ qt_add_executable(melo
     src/plugins/SkinImageProvider.cpp
     src/plugins/SkinImageProvider.h
 )
+if(WIN32)
+    target_sources(melo PRIVATE src/core/PortalDialog_win.cpp)
+    target_link_libraries(melo PRIVATE ole32 shell32)
+else()
+    target_sources(melo PRIVATE src/core/MprisService.cpp src/core/PortalDialog.cpp)
+endif()
 
 target_include_directories(melo PRIVATE src/audio src/vis src/rpc src/core src/plugins src/ui)
 if(TARGET Qt6::QuickPrivate)
@@ -236,7 +250,11 @@ endif()
 # The silence scan's ffmpeg: a 1.6 MB build of only what the scan uses
 # (scripts/build-ffmpeg.sh). Installed beside melo. If it cannot be built,
 # melo falls back to an ffmpeg on PATH, and without one skips no silence.
-set(MELO_FFMPEG "${CMAKE_CURRENT_SOURCE_DIR}/vendor/ffmpeg/bin/ffmpeg")
+if(WIN32)
+    set(MELO_FFMPEG "${CMAKE_CURRENT_SOURCE_DIR}/vendor/ffmpeg/bin/ffmpeg.exe")
+else()
+    set(MELO_FFMPEG "${CMAKE_CURRENT_SOURCE_DIR}/vendor/ffmpeg/bin/ffmpeg")
+endif()
 if(UNIX AND NOT APPLE AND NOT EXISTS "${MELO_FFMPEG}")
     message(STATUS "melo: building the silence scan's ffmpeg (first configure only)")
     execute_process(COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-ffmpeg.sh"
@@ -319,7 +337,7 @@ add_dependencies(melo melo_plugin_imports)
 target_compile_definitions(melo PRIVATE
     MELO_DEV_PLUGIN_IMPORT_DIR="${MELO_PLUGIN_IMPORT_DIR}")
 target_link_libraries(melo PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Quick Qt6::OpenGL Qt6::DBus Qt6::Network
+    Qt6::Core Qt6::Gui Qt6::Quick Qt6::OpenGL ${MELO_DBUS_LIB} Qt6::Network
     $<$<TARGET_EXISTS:Qt6::QuickPrivate>:Qt6::QuickPrivate>
     ZLIB::ZLIB
     ${MELO_MEDIA_LIBS}
@@ -891,58 +909,61 @@ if(Qt6Test_FOUND)
         MELO_DEV_PLUGIN_IMPORT_DIR="${MELO_PLUGIN_IMPORT_DIR}"
         MELO_DEV_SIDECAR="${CMAKE_CURRENT_SOURCE_DIR}/sidecar/dist/melo-sidecar.mjs")
     target_link_libraries(tst_windowshape PRIVATE
-        Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network Qt6::DBus Qt6::Test
+        Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network ${MELO_DBUS_LIB} Qt6::Test
         ZLIB::ZLIB ${MELO_GST_LIB})
     add_dependencies(tst_windowshape melo_plugin_imports)
     add_test(NAME windowshape COMMAND tst_windowshape)
 
-    # Per-window compositor geometry and drag snapping on real QQuickWindows
-    # (same cone as tst_windowshape). Runs the generated KWin script in a
-    # QJSEngine against a fake `workspace` to test the pid guard.
-    add_executable(tst_windowsnap
-        tests/cpp/tst_windowsnap.cpp
-        src/plugins/PluginWindowHost.cpp
-        src/plugins/PluginWindowHost.h
-        src/plugins/PluginUiHost.cpp
-        src/plugins/MeloUi.cpp
-        src/plugins/MeloUi.h
-        src/plugins/MeloUiArchives.cpp
-        src/plugins/MeloUiArchives.h
-        src/plugins/MeloUiQueueView.cpp
-        src/plugins/MeloUiQueueView.h
-        src/plugins/SkinArchive.cpp
-        src/plugins/SkinImageProvider.cpp
-        src/plugins/ZipReader.cpp
-        src/core/PlayerState.h
-        src/core/QueueModel.h
-        src/core/SuggestionsModel.h
-        src/core/Track.h
-        src/core/PlaybackCoordinator.cpp
-        src/core/SettingsStore.cpp
-        src/core/WindowController.h
-        ${MELO_WINDOWCTL}
-        src/rpc/SidecarService.cpp
-        src/rpc/RpcClient.cpp
-        src/rpc/SidecarProcess.cpp
-        src/rpc/NodeBootstrap.cpp
-        src/audio/AudioEngine.cpp
-        src/audio/SourceDeck.cpp
-        src/vis/SpectrumSource.cpp)
-    target_include_directories(tst_windowsnap PRIVATE
-        src/plugins src/core src/rpc src/audio src/vis)
-    target_compile_definitions(tst_windowsnap PRIVATE
-        MELO_DEV_PLUGIN_IMPORT_DIR="${MELO_PLUGIN_IMPORT_DIR}"
-        MELO_DEV_SIDECAR="${CMAKE_CURRENT_SOURCE_DIR}/sidecar/dist/melo-sidecar.mjs"
-        # The window tests hand a REAL multi-window manifest to the real host;
-        # tests/fixtures/skin-plugin carries its declaration.
-        MELO_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-        # docs/plugins.md is read by everyFacadeMemberIsInTheDocs.
-        MELO_REPO_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-    target_link_libraries(tst_windowsnap PRIVATE
-        Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network Qt6::DBus Qt6::Test
-        ZLIB::ZLIB ${MELO_GST_LIB})
-    add_dependencies(tst_windowsnap melo_plugin_imports)
-    add_test(NAME windowsnap COMMAND tst_windowsnap)
+    # KWin script generators and the D-Bus geometry receiver: Linux only
+    if(UNIX AND NOT APPLE)
+        # Per-window compositor geometry and drag snapping on real QQuickWindows
+        # (same cone as tst_windowshape). Runs the generated KWin script in a
+        # QJSEngine against a fake `workspace` to test the pid guard.
+        add_executable(tst_windowsnap
+            tests/cpp/tst_windowsnap.cpp
+            src/plugins/PluginWindowHost.cpp
+            src/plugins/PluginWindowHost.h
+            src/plugins/PluginUiHost.cpp
+            src/plugins/MeloUi.cpp
+            src/plugins/MeloUi.h
+            src/plugins/MeloUiArchives.cpp
+            src/plugins/MeloUiArchives.h
+            src/plugins/MeloUiQueueView.cpp
+            src/plugins/MeloUiQueueView.h
+            src/plugins/SkinArchive.cpp
+            src/plugins/SkinImageProvider.cpp
+            src/plugins/ZipReader.cpp
+            src/core/PlayerState.h
+            src/core/QueueModel.h
+            src/core/SuggestionsModel.h
+            src/core/Track.h
+            src/core/PlaybackCoordinator.cpp
+            src/core/SettingsStore.cpp
+            src/core/WindowController.h
+            ${MELO_WINDOWCTL}
+            src/rpc/SidecarService.cpp
+            src/rpc/RpcClient.cpp
+            src/rpc/SidecarProcess.cpp
+            src/rpc/NodeBootstrap.cpp
+            src/audio/AudioEngine.cpp
+            src/audio/SourceDeck.cpp
+            src/vis/SpectrumSource.cpp)
+        target_include_directories(tst_windowsnap PRIVATE
+            src/plugins src/core src/rpc src/audio src/vis)
+        target_compile_definitions(tst_windowsnap PRIVATE
+            MELO_DEV_PLUGIN_IMPORT_DIR="${MELO_PLUGIN_IMPORT_DIR}"
+            MELO_DEV_SIDECAR="${CMAKE_CURRENT_SOURCE_DIR}/sidecar/dist/melo-sidecar.mjs"
+            # The window tests hand a REAL multi-window manifest to the real host;
+            # tests/fixtures/skin-plugin carries its declaration.
+            MELO_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+            # docs/plugins.md is read by everyFacadeMemberIsInTheDocs.
+            MELO_REPO_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+        target_link_libraries(tst_windowsnap PRIVATE
+            Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network ${MELO_DBUS_LIB} Qt6::Test
+            ZLIB::ZLIB ${MELO_GST_LIB})
+        add_dependencies(tst_windowsnap melo_plugin_imports)
+        add_test(NAME windowsnap COMMAND tst_windowsnap)
+    endif()
 
     # The forwarder Main.qml uses once several plugins own windows. Only the
     # empty hub is driven, but PluginWindowsHub.cpp calls
@@ -985,7 +1006,7 @@ if(Qt6Test_FOUND)
         MELO_DEV_PLUGIN_IMPORT_DIR="${MELO_PLUGIN_IMPORT_DIR}"
         MELO_DEV_SIDECAR="${CMAKE_CURRENT_SOURCE_DIR}/sidecar/dist/melo-sidecar.mjs")
     target_link_libraries(tst_pluginwindowshub PRIVATE
-        Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network Qt6::DBus Qt6::Test
+        Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Network ${MELO_DBUS_LIB} Qt6::Test
         ZLIB::ZLIB ${MELO_GST_LIB})
     add_dependencies(tst_pluginwindowshub melo_plugin_imports)
     add_test(NAME pluginwindowshub COMMAND tst_pluginwindowshub)
@@ -1054,7 +1075,9 @@ if(Qt6Test_FOUND)
     # Real windows offscreen again, and several rows WAIT OUT the host's 120ms
     # settle timer to prove nothing happened. The cycle row's failure mode is a
     # walk that never returns, so ctest is the outer guard there.
-    set_tests_properties(windowsnap        PROPERTIES TIMEOUT 60)
+    if(UNIX AND NOT APPLE)
+        set_tests_properties(windowsnap        PROPERTIES TIMEOUT 60)
+    endif()
     # No windows, no timers: one construction and two reads.
     set_tests_properties(pluginwindowshub  PROPERTIES TIMEOUT 30)
     # Occupancy, key install, typing flag. QShortcut needs QGuiApplication

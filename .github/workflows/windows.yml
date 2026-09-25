@@ -133,7 +133,7 @@ jobs:
       - name: projectM
         id: projectm
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install glew:x64-windows glm:x64-windows
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install glew:x64-windows glm:x64-windows zlib:x64-windows
           if ($LASTEXITCODE) { throw "vcpkg failed" }
           $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
           ./scripts/setup-vendor-win.ps1

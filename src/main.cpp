@@ -21,8 +21,10 @@
 #include <string>
 #include <atomic>
 #include <QUrl>
+#ifndef Q_OS_WIN
 #include <QDBusConnection>
 #include <QDBusInterface>
+#endif
 #include <QFileInfo>
 #include <cstdio>
 #include <gst/gst.h>
@@ -49,7 +51,9 @@
 #include "LibraryStore.h"
 #include "PlaybackCoordinator.h"
 #include "WindowController.h"
+#ifndef Q_OS_WIN
 #include "MprisService.h"
+#endif
 #include "MeloUi.h"
 #include "PluginUiHost.h"
 #include "PluginUiHub.h"
