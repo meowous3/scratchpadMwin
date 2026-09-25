@@ -1,0 +1,2 @@
+# LF everywhere: the Windows runner checks out CRLF otherwise, which breaks bash scripts, patches and fixture comparisons
+* text=auto eol=lf
