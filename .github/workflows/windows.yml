@@ -188,24 +188,6 @@ jobs:
         id: build
         run: cmake --build build -- -k 0
 
-      - name: DIAG colorpicker
-        if: always() && steps.build.outcome == 'success'
-        continue-on-error: true
-        run: |
-          $r = (Get-Command qmltestrunner.exe).Source
-          "=== subsystem ==="
-          & dumpbin /headers $r | Select-String 'subsystem'
-          "=== colorhex, stdout to file ==="
-          $env:QT_QPA_PLATFORM = 'offscreen'
-          & $r -input tests\qml\tst_colorhex.qml > "$env:RUNNER_TEMP\a.txt" 2> "$env:RUNNER_TEMP\b.txt"
-          "exit=$LASTEXITCODE out=$((Get-Item "$env:RUNNER_TEMP\a.txt").Length) err=$((Get-Item "$env:RUNNER_TEMP\b.txt").Length)"
-          "=== colorhex, -o -,txt ==="
-          & $r -input tests\qml\tst_colorhex.qml -o '-,txt' > "$env:RUNNER_TEMP\c.txt" 2>&1
-          "exit=$LASTEXITCODE out=$((Get-Item "$env:RUNNER_TEMP\c.txt").Length)"
-          Get-Content "$env:RUNNER_TEMP\c.txt" | Select-Object -Last 3
-          "=== ctest colorpicker -V ==="
-          ctest --test-dir build -R '^tst_colorpicker$' -V 2>&1 | Select-String -Pattern 'FAIL|Totals|Passed|Failed|QT_QPA_FONTDIR|Environment'
-
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
