@@ -64,9 +64,16 @@ QString SidecarProcess::resolveNode() {
 }
 
 bool SidecarProcess::nodeVersionOk(const QString& node) {
+#ifdef Q_OS_WIN
+    // Defender scans a freshly unpacked node.exe on its first run, which can
+    // take longer than 3 s; a timeout here fails the first launch for good.
+    constexpr int kVersionWaitMs = 10000;
+#else
+    constexpr int kVersionWaitMs = 3000;
+#endif
     QProcess p;
     p.start(node, {"--version"});
-    if (!p.waitForFinished(3000)) { p.kill(); return false; }
+    if (!p.waitForFinished(kVersionWaitMs)) { p.kill(); return false; }
     const QString v = QString::fromLatin1(p.readAllStandardOutput()).trimmed();   // "v22.19.0"
     if (!v.startsWith(u'v')) return false;
     const int major = v.mid(1).section(u'.', 0, 0).toInt();
@@ -100,7 +107,7 @@ void SidecarProcess::start() {
     const QString bundle = resolveBundle();
     if (node.isEmpty()) {
 #ifdef Q_OS_WIN
-        emit permanentlyFailed("Node.js not found (need >= 22.15; set MELO_NODE)");
+        emit permanentlyFailed("No usable Node.js >= 22.15 found (set MELO_NODE)");
 #else
         emit nodeMissing();   // main.cpp starts a NodeBootstrap download, then retries start()
 #endif
