@@ -13,8 +13,14 @@
 // before QCoreApplication exists (the Windows log lives there). Windows: an
 // empty `portable` file beside melo.exe keeps everything in <exeDir>/data.
 inline QString meloConfigDirFrom(const QString& exeDir) {
+#ifdef Q_OS_WIN
+    // UTF-16 read: a local-8-bit round trip would mangle non-ANSI paths.
+    const QString env = qEnvironmentVariable("MELO_CONFIG_DIR");
+    if (!env.isEmpty()) return env;
+#else
     const QByteArray env = qgetenv("MELO_CONFIG_DIR");
     if (!env.isEmpty()) return QString::fromLocal8Bit(env);
+#endif
 #ifdef Q_OS_WIN
     if (!exeDir.isEmpty() && QFileInfo::exists(exeDir + QStringLiteral("/portable")))
         return exeDir + QStringLiteral("/data");
