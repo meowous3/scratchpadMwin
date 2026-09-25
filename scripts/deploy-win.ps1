@@ -37,10 +37,14 @@ foreach ($pat in 'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140*.dll', 'con
 # visualiser
 Copy-Item -Force "$Root\vendor\projectm4\bin\*.dll" $Out
 Copy-Item -Force "$VcpkgBin\glew32.dll" $Out
+# zlib: melo.exe links vcpkg's z.lib
+Copy-Item -Force "$VcpkgBin\z.dll" $Out
 
 # GStreamer: runtime DLLs beside melo.exe, plugins and gio modules in the
 # folders main.cpp points GST_PLUGIN_PATH / GIO_EXTRA_MODULES at
 Copy-Item -Force "$GstRoot\bin\*.dll" $Out
+# proxy-1.dll (gio's libproxy module) imports pxbackend-1.0.dll from lib\libproxy
+Copy-Item -Force "$GstRoot\lib\libproxy\*.dll" $Out
 New-Item -ItemType Directory "$Out\gst-plugins", "$Out\gio-modules" | Out-Null
 Copy-Item "$GstRoot\lib\gstreamer-1.0\*.dll" "$Out\gst-plugins"
 # the python loader needs a system python39.dll; melo uses no python elements
