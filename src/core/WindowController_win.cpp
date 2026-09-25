@@ -1,6 +1,7 @@
-// Windows backend for WindowController. Compositor features are no-ops until Milestone 2; input masks, clipboard and logging are shared (WindowController_common.cpp).
+// Windows backend for WindowController. Compositor features are no-ops until
+// Milestone 2; input masks, clipboard and logging are shared
+// (WindowController_common.cpp).
 #include "WindowController.h"
-#include <QGuiApplication>
 #include <QQuickWindow>
 
 WindowController::WindowController(QObject* parent) : QObject(parent) { initFocusTracking(); }

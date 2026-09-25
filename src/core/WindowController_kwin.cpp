@@ -7,7 +7,6 @@
 #include <QDBusReply>
 #include <QFile>
 #include <QFileInfo>
-#include <QClipboard>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
