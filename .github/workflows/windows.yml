@@ -1,0 +1,168 @@
+name: windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: 6.11.2
+  GST_VERSION: 1.28.7
+  GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+  NODE_VERSION: 22.23.2
+  PNPM_VERSION: 10.30.3
+
+jobs:
+  sidecar:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sidecar
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
+          cache: pnpm
+          cache-dependency-path: sidecar/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  native:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: x64 }
+
+      - name: Cache Qt
+        id: qt-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}\Qt
+          key: qt-${{ env.QT_VERSION }}-msvc2022_64-v1
+      - name: Install Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install 'aqtinstall==3.2.*'
+          aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 `
+            -m qtshadertools qt5compat qtimageformats -O "$env:GITHUB_WORKSPACE\Qt"
+      - name: Put Qt on the path
+        run: |
+          $qt = "$env:GITHUB_WORKSPACE\Qt\$env:QT_VERSION\msvc2022_64"
+          if (-not (Test-Path "$qt\bin\qmake.exe")) { throw "Qt missing at $qt" }
+          "$qt\bin" | Out-File -Append $env:GITHUB_PATH
+          "CMAKE_PREFIX_PATH=$qt" | Out-File -Append $env:GITHUB_ENV
+
+      # 1.28 ships one Inno Setup installer; /TYPE=full includes the headers,
+      # .pc files and pkg-config.exe the build needs
+      - name: Cache GStreamer installer
+        uses: actions/cache@v6
+        with:
+          path: gst-installer
+          key: gst-${{ env.GST_VERSION }}-msvc-x86_64
+      - name: Install GStreamer
+        run: |
+          $exe = "gst-installer\gstreamer-1.0-msvc-x86_64-$env:GST_VERSION.exe"
+          if (-not (Test-Path $exe)) {
+            New-Item -ItemType Directory -Force gst-installer | Out-Null
+            Invoke-WebRequest -OutFile $exe `
+              "https://gstreamer.freedesktop.org/data/pkg/windows/$env:GST_VERSION/msvc/gstreamer-1.0-msvc-x86_64-$env:GST_VERSION.exe"
+          }
+          if ((Get-FileHash -Algorithm SHA256 $exe).Hash -ne $env:GST_SHA256) { throw "GStreamer installer hash mismatch" }
+          $p = Start-Process -Wait -PassThru $exe -ArgumentList `
+            '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/ALLUSERS','/TYPE=full','/DIR=C:\gstreamer'
+          if ($p.ExitCode -ne 0) { throw "GStreamer install failed ($($p.ExitCode))" }
+          if (-not (Test-Path 'C:\gstreamer\bin\pkg-config.exe')) { throw "pkg-config.exe missing" }
+          'C:\gstreamer\bin' | Out-File -Append $env:GITHUB_PATH
+          'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer' | Out-File -Append $env:GITHUB_ENV
+
+      - uses: pnpm/action-setup@v6
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
+          cache: pnpm
+          cache-dependency-path: sidecar/pnpm-lock.yaml
+
+      - name: Cache vendor
+        id: vendor-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            vendor/projectm4
+            vendor/ffmpeg
+            vendor/presets
+          key: vendor-win-${{ hashFiles('scripts/setup-vendor-win.ps1', 'scripts/build-ffmpeg.sh', 'scripts/fetch-presets.sh', 'patches/projectm-caller-fbo.patch') }}
+
+      - name: projectM
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install glew:x64-windows glm:x64-windows
+          if ($LASTEXITCODE) { throw "vcpkg failed" }
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
+          ./scripts/setup-vendor-win.ps1
+          "$env:GITHUB_WORKSPACE\vendor\projectm4\bin" | Out-File -Append $env:GITHUB_PATH
+          "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" | Out-File -Append $env:GITHUB_PATH
+          "CMAKE_PREFIX_PATH=$env:CMAKE_PREFIX_PATH;$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows" | Out-File -Append $env:GITHUB_ENV
+
+      # ffmpeg's configure needs a POSIX shell and make; cl.exe comes from the
+      # MSVC environment inherited through path-type: inherit
+      - uses: msys2/setup-msys2@v2
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        with:
+          msystem: MSYS
+          path-type: inherit
+          install: make diffutils tar xz
+      - name: ffmpeg
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          # MSYS's coreutils link.exe shadows MSVC's link.exe
+          rm -f /usr/bin/link.exe
+          bash scripts/build-ffmpeg.sh
+          test -f vendor/ffmpeg/bin/ffmpeg.exe
+      - name: Presets
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: bash scripts/fetch-presets.sh
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure
+
+      # --smoke exits 3 on any QML diagnostic during startup. melo.exe is a GUI
+      # app, so stderr only reaches us through an explicit redirect.
+      - name: Starts with no QML errors
+        run: |
+          $cfg = "$env:RUNNER_TEMP\melo-ci"
+          New-Item -ItemType Directory -Force $cfg | Out-Null
+          $env:MELO_CONFIG_DIR = $cfg
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $p = Start-Process -Wait -PassThru -NoNewWindow build\melo.exe -ArgumentList '--smoke' `
+                 -RedirectStandardError "$env:RUNNER_TEMP\smoke.log"
+          Get-Content "$env:RUNNER_TEMP\smoke.log"
+          if (-not (Select-String -Quiet -SimpleMatch '[melo] ui ready' "$env:RUNNER_TEMP\smoke.log")) {
+            throw "the window never finished loading" }
+          if ($p.ExitCode -ne 0) { throw "QML errors on startup (exit $($p.ExitCode))" }
