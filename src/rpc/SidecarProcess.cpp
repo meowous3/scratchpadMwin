@@ -44,10 +44,14 @@ QString SidecarProcess::resolveNode() {
     const QByteArray env = qgetenv("MELO_NODE");
     if (!env.isEmpty()) return QString::fromLocal8Bit(env);
 #ifdef Q_OS_WIN
-    // packaged: node.exe shipped beside melo.exe (see the CI deploy step)
+    // packaged: node.exe shipped beside melo.exe (scripts/deploy-win.ps1).
+    // Version-checked like Linux: below 22.15 the plugin sandbox's net/tls
+    // block silently does not install.
     const QString bundled = QCoreApplication::applicationDirPath() + "/node.exe";
-    if (QFileInfo::exists(bundled)) return bundled;
-    return QStandardPaths::findExecutable("node");
+    if (QFileInfo::exists(bundled) && nodeVersionOk(bundled)) return bundled;
+    const QString sys = QStandardPaths::findExecutable("node");
+    if (!sys.isEmpty() && nodeVersionOk(sys)) return sys;
+    return {};
 #else
     // lite AppImage: system node when it's new enough, else the runtime
     // NodeBootstrap downloaded on a previous run
@@ -77,6 +81,11 @@ bool SidecarProcess::nodeVersionOk(const QString& node) {
 QString SidecarProcess::resolveBundle() {
     const QByteArray env = qgetenv("MELO_SIDECAR");
     if (!env.isEmpty()) return QString::fromLocal8Bit(env);
+#ifdef Q_OS_WIN
+    // packaged: sidecar\ beside melo.exe (scripts/deploy-win.ps1)
+    const QString beside = QCoreApplication::applicationDirPath() + "/sidecar/melo-sidecar.mjs";
+    if (QFileInfo::exists(beside)) return beside;
+#endif
     const QString installed = QCoreApplication::applicationDirPath() + "/../share/melo/melo-sidecar.mjs";
     if (QFileInfo::exists(installed)) return installed;
 #ifdef MELO_DEV_SIDECAR

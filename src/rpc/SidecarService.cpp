@@ -67,7 +67,11 @@ void SidecarService::initialize() {
 
     // The silence scan's ffmpeg: beside the binary in an install or AppImage,
     // the vendored build in a dev tree, else empty and the sidecar uses PATH.
+#ifdef Q_OS_WIN
+    QString ffmpeg = QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg.exe");
+#else
     QString ffmpeg = QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg");
+#endif
 #ifdef MELO_DEV_FFMPEG
     if (!QFileInfo::exists(ffmpeg)) ffmpeg = QStringLiteral(MELO_DEV_FFMPEG);
 #endif
