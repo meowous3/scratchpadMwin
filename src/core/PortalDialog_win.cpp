@@ -9,6 +9,7 @@
 #include <QGuiApplication>
 #include <QTimer>
 #include <QWindow>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,16 @@
 using Microsoft::WRL::ComPtr;
 
 namespace {
+
+// A real failure reaches melo.log; the caller still just sees cancelled().
+// The user dismissing the dialog (ERROR_CANCELLED) is not a failure.
+bool ok(HRESULT hr, const char* step) {
+    if (SUCCEEDED(hr)) return true;
+    if (hr != HRESULT_FROM_WIN32(ERROR_CANCELLED))
+        std::fprintf(stderr, "[portal] file dialog failed at %s (0x%08lx)\n", step,
+                     static_cast<unsigned long>(hr));
+    return false;
+}
 
 // Modal on the focused melo window, else any visible one.
 HWND ownerWindow() {
@@ -31,7 +42,7 @@ HWND ownerWindow() {
 
 QString itemPath(IShellItem* item) {
     PWSTR s = nullptr;
-    if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &s)) || !s) return {};
+    if (!ok(item->GetDisplayName(SIGDN_FILESYSPATH, &s), "GetDisplayName") || !s) return {};
     const QString out = QDir::fromNativeSeparators(QString::fromWCharArray(s));
     CoTaskMemFree(s);
     return out;
@@ -52,8 +63,8 @@ void applyFilters(IFileDialog* dlg, const QString& filterName, const QStringList
         store.push_back(wide(f.spec));
         specs.push_back({store[store.size() - 2].c_str(), store.back().c_str()});
     }
-    dlg->SetFileTypes(UINT(specs.size()), specs.data());
-    dlg->SetFileTypeIndex(1);
+    ok(dlg->SetFileTypes(UINT(specs.size()), specs.data()), "SetFileTypes");
+    ok(dlg->SetFileTypeIndex(1), "SetFileTypeIndex");
 }
 
 // COM on the GUI thread. Qt's Windows plugin has usually initialised OLE
@@ -67,28 +78,28 @@ QStringList runOpen(const QString& title, const QString& filterName,
                     const QStringList& patterns, bool multiple) {
     ComApartment com;
     ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&dlg))))
+    if (!ok(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                             IID_PPV_ARGS(&dlg)), "CoCreateInstance(FileOpenDialog)"))
         return {};
     DWORD opts = 0;
-    dlg->GetOptions(&opts);
+    ok(dlg->GetOptions(&opts), "GetOptions");
     opts |= FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST;
     if (multiple) opts |= FOS_ALLOWMULTISELECT;
-    dlg->SetOptions(opts);
+    ok(dlg->SetOptions(opts), "SetOptions");
     const std::wstring wtitle = wide(title);
-    if (!title.isEmpty()) dlg->SetTitle(wtitle.c_str());
+    if (!title.isEmpty()) ok(dlg->SetTitle(wtitle.c_str()), "SetTitle");
     std::vector<std::wstring> store;
     applyFilters(dlg.Get(), filterName, patterns, store);
-    // Cancel returns HRESULT_FROM_WIN32(ERROR_CANCELLED)
-    if (FAILED(dlg->Show(ownerWindow()))) return {};
+    // Cancel returns HRESULT_FROM_WIN32(ERROR_CANCELLED); ok() stays quiet on it
+    if (!ok(dlg->Show(ownerWindow()), "Show")) return {};
     ComPtr<IShellItemArray> items;
-    if (FAILED(dlg->GetResults(&items))) return {};
+    if (!ok(dlg->GetResults(&items), "GetResults")) return {};
     DWORD n = 0;
     items->GetCount(&n);
     QStringList paths;
     for (DWORD i = 0; i < n; ++i) {
         ComPtr<IShellItem> item;
-        if (SUCCEEDED(items->GetItemAt(i, &item))) {
+        if (ok(items->GetItemAt(i, &item), "GetItemAt")) {
             const QString p = itemPath(item.Get());
             if (!p.isEmpty()) paths << p;
         }
@@ -100,22 +111,23 @@ QString runSave(const QString& title, const QString& suggestedName,
                 const QString& filterName, const QStringList& patterns) {
     ComApartment com;
     ComPtr<IFileSaveDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&dlg))))
+    if (!ok(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER,
+                             IID_PPV_ARGS(&dlg)), "CoCreateInstance(FileSaveDialog)"))
         return {};
     DWORD opts = 0;
-    dlg->GetOptions(&opts);
-    dlg->SetOptions(opts | FOS_FORCEFILESYSTEM | FOS_OVERWRITEPROMPT | FOS_PATHMUSTEXIST);
+    ok(dlg->GetOptions(&opts), "GetOptions");
+    ok(dlg->SetOptions(opts | FOS_FORCEFILESYSTEM | FOS_OVERWRITEPROMPT | FOS_PATHMUSTEXIST),
+       "SetOptions");
     const std::wstring wtitle = wide(title), wname = wide(suggestedName),
                        wext = wide(portalDefaultExtension(patterns));
-    if (!title.isEmpty()) dlg->SetTitle(wtitle.c_str());
-    if (!suggestedName.isEmpty()) dlg->SetFileName(wname.c_str());
-    if (!wext.empty()) dlg->SetDefaultExtension(wext.c_str());
+    if (!title.isEmpty()) ok(dlg->SetTitle(wtitle.c_str()), "SetTitle");
+    if (!suggestedName.isEmpty()) ok(dlg->SetFileName(wname.c_str()), "SetFileName");
+    if (!wext.empty()) ok(dlg->SetDefaultExtension(wext.c_str()), "SetDefaultExtension");
     std::vector<std::wstring> store;
     applyFilters(dlg.Get(), filterName, patterns, store);
-    if (FAILED(dlg->Show(ownerWindow()))) return {};
+    if (!ok(dlg->Show(ownerWindow()), "Show")) return {};
     ComPtr<IShellItem> item;
-    if (FAILED(dlg->GetResult(&item))) return {};
+    if (!ok(dlg->GetResult(&item), "GetResult")) return {};
     return itemPath(item.Get());
 }
 
