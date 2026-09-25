@@ -631,6 +631,15 @@ if(Qt6Test_FOUND)
                        /usr/lib64/qt6/bin /usr/lib/qt6/bin)
     if(MELO_QMLTESTRUNNER)
         file(GLOB MELO_QML_TESTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_*.qml")
+        # offscreen: these run in CI and over ssh, where there is no display.
+        # On Windows the offscreen platform does not read the system fonts: it
+        # loads only QT_QPA_FONTDIR (default <Qt>/lib/fonts, absent), and with
+        # no font every glyph is a pixelSize-wide box, so text that fits on
+        # Linux elides. Point it at the font melo ships.
+        set(_melo_qml_env "QT_QPA_PLATFORM=offscreen")
+        if(WIN32)
+            list(APPEND _melo_qml_env "QT_QPA_FONTDIR=${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts")
+        endif()
         foreach(qt_file ${MELO_QML_TESTS})
             get_filename_component(qt_name ${qt_file} NAME_WE)
             # Offscreen defaults to the software scene graph, which skips every
@@ -645,16 +654,15 @@ if(Qt6Test_FOUND)
                 add_test(NAME ${qt_name}
                          COMMAND ${MELO_QMLTESTRUNNER} -input ${qt_file})
             endif()
-            # offscreen: these run in CI and over ssh, where there is no display
             set_tests_properties(${qt_name} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+                ENVIRONMENT "${_melo_qml_env}")
         endforeach()
         # an SVG picture's reported size depends on the device pixel ratio
         add_test(NAME tst_imagefills_dpr-scaled
                  COMMAND ${MELO_QMLTESTRUNNER} -input
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_imagefills_dpr.qml)
         set_tests_properties(tst_imagefills_dpr-scaled PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2")
+            ENVIRONMENT "${_melo_qml_env};QT_SCALE_FACTOR=2")
     else()
         message(WARNING "qmltestrunner not found — the QML suites will not run")
     endif()
