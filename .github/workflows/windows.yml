@@ -68,6 +68,9 @@ jobs:
           python -m pip install 'aqtinstall @ git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
           aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 `
             -m qtshadertools qt5compat qtimageformats -O "$env:GITHUB_WORKSPACE\Qt"
+          if ($LASTEXITCODE) { throw "aqt failed" }
+          $qmake = "$env:GITHUB_WORKSPACE\Qt\$env:QT_VERSION\msvc2022_64\bin\qmake.exe"
+          if (-not (Test-Path $qmake)) { throw "Qt missing at $qmake" }
       - name: Save Qt
         if: always() && steps.qt-install.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -77,7 +80,6 @@ jobs:
       - name: Put Qt on the path
         run: |
           $qt = "$env:GITHUB_WORKSPACE\Qt\$env:QT_VERSION\msvc2022_64"
-          if (-not (Test-Path "$qt\bin\qmake.exe")) { throw "Qt missing at $qt" }
           "$qt\bin" | Out-File -Append $env:GITHUB_PATH
           "CMAKE_PREFIX_PATH=$qt" | Out-File -Append $env:GITHUB_ENV
 

@@ -7,7 +7,7 @@
 # LGPL-2.1-or-later: no --enable-gpl, no nonfree. The pinned tarball and this
 # configure line are the corresponding source; release-sources.sh ships both.
 #
-#   scripts/build-ffmpeg.sh        -> vendor/ffmpeg/bin/ffmpeg
+#   scripts/build-ffmpeg.sh        -> vendor/ffmpeg/bin/ffmpeg[.exe]
 set -euo pipefail
 
 # MSYS2 on Windows: the same configure line with the MSVC toolchain, and an
