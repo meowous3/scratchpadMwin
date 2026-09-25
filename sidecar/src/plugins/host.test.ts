@@ -123,9 +123,13 @@ describe("plugin host", () => {
 
   // The --allow-fs-* flags built by fsAllowGlob must grant the plugin's own
   // folder and nothing beside it: a too-broad Windows form would fail open.
-  it("lets a plugin read inside its folder and denies a sibling folder", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "melo-fsperm-"));
-    const outside = mkdtempSync(join(tmpdir(), "melo-fsperm-out-"));
+  // The non-ASCII + space row is the folder a user unzips the portable build into.
+  it.each([
+    ["an ASCII", "melo-fsperm-"],
+    ["a non-ASCII, spaced", "melo Zoë ü fsperm-"],
+  ])("lets a plugin in %s folder read inside it and denies a sibling folder", async (_label, prefix) => {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    const outside = mkdtempSync(join(tmpdir(), `${prefix}out-`));
     const inFile = join(dir, "inside.txt");
     const outFile = join(outside, "outside.txt");
     writeFileSync(inFile, "in");

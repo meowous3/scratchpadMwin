@@ -191,7 +191,14 @@ jobs:
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE) { throw "ctest failed" }
+          # a QML suite's per-case lines must reach ctest's log
+          # (tests/cmake/run_qmltest.cmake)
+          $out = ctest --test-dir build -R '^tst_colorhex$' --verbose | Out-String
+          $out
+          if ($out -notmatch 'Totals: \d+ passed') { throw "tst_colorhex printed no QtTest results" }
 
       # --smoke exits 3 on any QML diagnostic during startup. melo.exe is a GUI
       # app, so stderr only reaches us through an explicit redirect.
@@ -260,6 +267,69 @@ jobs:
           if (-not (Test-Path "$cfg\gst-registry.bin")) { throw "no gst-registry.bin in ${cfg}: bundled GStreamer environment not applied" }
           "gst-registry.bin present: $((Get-Item "$cfg\gst-registry.bin").Length) bytes"
 
+      # the way a user starts the portable zip: from a folder with a space and
+      # non-ASCII letters, no MELO_CONFIG_DIR, and no std handles (launched
+      # without -NoNewWindow or a redirect), so melo logs to data\melo.log
+      - name: Portable build starts from a non-ASCII folder
+        timeout-minutes: 10
+        run: |
+          $dir = "$env:RUNNER_TEMP\melo Zoë ü\melo"
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Robocopy dist $dir /E /NFL /NDL /NJH /NJS /NP | Out-Null
+          if ($LASTEXITCODE -ge 8) { throw "copy failed" }
+          $global:LASTEXITCODE = 0
+          New-Item -ItemType File "$dir\portable" | Out-Null
+          Remove-Item Env:MELO_CONFIG_DIR -ErrorAction SilentlyContinue
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $offscreen = Join-Path (Split-Path (Get-Command windeployqt).Source) "..\plugins\platforms\qoffscreen.dll"
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint m);'
+          [W.K]::SetErrorMode(0x8003) | Out-Null
+          function Snapshot($p) {
+            if (-not (Test-Path $p)) { return '<absent>' }
+            (Get-ChildItem -LiteralPath $p -Recurse -Force |
+              ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)|$($_.Length)" } | Sort-Object) -join "`n"
+          }
+          $roaming = "$env:APPDATA\melo"; $local = "$env:LOCALAPPDATA\melo"
+          $roamingBefore = Snapshot $roaming; $localBefore = Snapshot $local
+          Copy-Item $offscreen "$dir\platforms\"
+          Rename-Item 'C:\gstreamer' 'C:\gstreamer-hidden'
+          try {
+            $p = Start-Process -PassThru "$dir\melo.exe" -ArgumentList '--smoke'
+            if (-not $p.WaitForExit(180000)) {
+              Get-Process | Where-Object { $_.Path -like "$dir\*" } |
+                Format-Table Id, ProcessName, StartTime | Out-String | Write-Host
+              Get-Process | Where-Object { $_.Path -like "$dir\*" } | Stop-Process -Force
+              Get-Content -LiteralPath "$dir\data\melo.log" -ErrorAction SilentlyContinue
+              throw "portable melo.exe did not exit within 180 s"
+            }
+          } finally {
+            Rename-Item 'C:\gstreamer-hidden' 'C:\gstreamer'
+            Remove-Item -LiteralPath "$dir\platforms\qoffscreen.dll" -ErrorAction SilentlyContinue
+          }
+          $logFile = "$dir\data\melo.log"
+          if (-not (Test-Path -LiteralPath $logFile)) {
+            Get-ChildItem -LiteralPath $dir -Force | Out-String | Write-Host
+            throw "no data\melo.log: melo did not take the no-console log path under $dir"
+          }
+          $log = [string](Get-Content -Raw -Encoding utf8 -LiteralPath $logFile)
+          $log
+          "exit code: $($p.ExitCode)"
+          if ($log -notmatch '\[melo\] ui ready') { throw "portable UI did not load" }
+          if ($log -notmatch '\[sidecar\]') { throw "portable sidecar did not start" }
+          if ($log -match 'missing GStreamer elements') { throw "portable GStreamer incomplete" }
+          if ($p.ExitCode -ne 0) { throw "QML errors on startup (exit $($p.ExitCode))" }
+          if (-not (Test-Path -LiteralPath "$dir\data\gst-registry.bin")) { throw "no data\gst-registry.bin" }
+          "data\: $((Get-ChildItem -LiteralPath "$dir\data" -Force | ForEach-Object Name) -join ', ')"
+          if ((Snapshot $roaming) -ne $roamingBefore) { throw "the portable run wrote to $roaming" }
+          $localAfter = Snapshot $local
+          if ($localAfter -ne $localBefore) {
+            Compare-Object ($localBefore -split "`n") ($localAfter -split "`n") | Out-String | Write-Host
+            throw "the portable run wrote to $local"
+          }
+          "nothing written to $roaming or $local"
+
       - name: Installer
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
@@ -281,6 +351,15 @@ jobs:
           Compress-Archive -Path portable\melo -DestinationPath melo-portable-win64.zip
           $global:LASTEXITCODE = 0
           "portable zip: $([math]::Round((Get-Item melo-portable-win64.zip).Length / 1MB, 1)) MB"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path melo-portable-win64.zip).Path)
+          try {
+            $names = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+          } finally { $zip.Dispose() }
+          foreach ($want in 'melo/portable', 'melo/melo.exe') {
+            if ($names -notcontains $want) { throw "portable zip is missing $want" }
+          }
+          if (Test-Path dist\portable) { throw "dist\portable exists: the installer would ship portable mode" }
 
       - uses: actions/upload-artifact@v5
         with:

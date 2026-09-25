@@ -26,6 +26,8 @@ private slots:
         QCOMPARE(QUrl(u).toLocalFile(), QStringLiteral("C:/Users/Zoë Smith/Music/a b.png"));
         QCOMPARE(QUrl(meloFileUrl("C:\\Users\\x\\y.png")).toLocalFile(),
                  QStringLiteral("C:/Users/x/y.png"));
+        QCOMPARE(QUrl(meloFileUrl("C:/a/c#1 50%.png")).toLocalFile(),
+                 QStringLiteral("C:/a/c#1 50%.png"));
 #endif
     }
 };
