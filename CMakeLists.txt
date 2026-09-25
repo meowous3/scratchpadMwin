@@ -639,6 +639,8 @@ if(Qt6Test_FOUND)
         set(_melo_qml_env "QT_QPA_PLATFORM=offscreen")
         if(WIN32)
             list(APPEND _melo_qml_env "QT_QPA_FONTDIR=${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts")
+            # melo.exe runs Fusion, Qt's Linux default (main.cpp); test it the same way
+            list(APPEND _melo_qml_env "QT_QUICK_CONTROLS_STYLE=Fusion")
         endif()
         foreach(qt_file ${MELO_QML_TESTS})
             get_filename_component(qt_name ${qt_file} NAME_WE)

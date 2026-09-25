@@ -219,6 +219,12 @@ int main(int argc, char** argv) {
         if (QDir(exeDir + "/gio-modules").exists())
             qputenv("GIO_EXTRA_MODULES", QDir::toNativeSeparators(exeDir + "/gio-modules").toLocal8Bit());
     }
+    // Qt's default Controls style on Linux is Fusion; on Windows it is the
+    // native "Windows" style, which rejects customized contentItem/background
+    // (MScrollBar) with a warning per instance. Use Linux's style. Set as the
+    // env default so -style and an explicit QT_QUICK_CONTROLS_STYLE still win.
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE"))
+        qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
 #endif
     gst_init(&argc, &argv);
 
