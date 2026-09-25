@@ -696,7 +696,7 @@ async function resolveWithClient(
     // maxBuffer as in every sibling call: `-j` output with a large caption
     // list exceeds Node's 1MB default and execFile kills the process. This
     // fallback runs only after the fast path already failed.
-    { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
+    { timeout: 30000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
   );
   const data = JSON.parse(stdout);
   const raw = typeof data.url === "string" ? data.url : "";
@@ -839,7 +839,7 @@ export async function fetchRecommendedTracks(count: number = 30): Promise<FlatTr
     YTDLP(),
     [...(await cookieArgs()), "--flat-playlist", "-j", "--no-warnings", "--no-cache-dir",
      "--playlist-items", `1:${count}`, "https://www.youtube.com/feed/recommended"],
-    { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
+    { timeout: 30000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
   );
   syncYtDlpCookies();
   return stdout.trim().split("\n").filter(Boolean).map((line) => {
@@ -917,7 +917,7 @@ export async function fetchPlaylistTracks(playlistId: string) {
       YTDLP(),
       [...(await cookieArgs()), ...YTDLP_COMMON, "--flat-playlist", "-j",
        ...(isMix ? ["--playlist-items", "1:50"] : []), url],
-      { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
+      { timeout: 30000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
     );
     syncYtDlpCookies();
     const { title, tracks } = parseFlatPlaylist(stdout);
@@ -975,7 +975,7 @@ async function fetchRadioTracks(
     YTDLP(),
     [...(await cookieArgs()), ...YTDLP_COMMON, "--flat-playlist", "-j",
      "--no-cache-dir", "--playlist-items", "1:50", url],
-    { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
+    { timeout: 30000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
   );
   syncYtDlpCookies();
   return parseFlatPlaylist(stdout).tracks;

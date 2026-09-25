@@ -1,3 +1,5 @@
+import { win32 } from "node:path";
+
 // Twin of src/plugins/InterceptMap.cpp kActions; keep both lists identical,
 // do not DRY at runtime. The first six are playback and the compact toggle;
 // the rest are melo's chrome buttons, whose commands offer here before acting,
@@ -82,4 +84,11 @@ export function permissionWarnings(p: {
   for (const a of p.permissions.intercept ?? [])
     w.push(`Handles ${a} instead of melo.`);
   return w;
+}
+
+/** Node --permission value for "everything inside dir" (the trailing-star
+ *  directory-contents form). Windows gets one separator throughout; the
+ *  POSIX string is unchanged. */
+export function fsAllowGlob(dir: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? win32.join(dir, "*") : `${dir}/*`;
 }

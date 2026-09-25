@@ -95,7 +95,7 @@ async function fromCaptions(videoId: string, allowAuto: boolean): Promise<Lyrics
            "--retries", "1", "--extractor-retries", "1", "--socket-timeout", "10",
            "-o", join(dir, "%(id)s.%(ext)s"),
            `https://www.youtube.com/watch?v=${videoId}`],
-          { timeout: 25000 },
+          { timeout: 25000, windowsHide: true },
         );
       } catch { /* 429 and "no subtitles" land here alike; try the next kind */ }
       const file = readdirSync(dir).find((f) => f.endsWith(".json3"));

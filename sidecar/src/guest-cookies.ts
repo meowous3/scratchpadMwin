@@ -299,7 +299,7 @@ async function importChromeViaCDP(profile: string): Promise<number> {
       "--disable-extensions",
       "--disable-sync",
       "about:blank",
-    ], { stdio: "ignore" });
+    ], { stdio: "ignore", windowsHide: true });
 
     // Wait for Chrome to start and listen on the debug port
     let wsUrl = "";
@@ -408,7 +408,7 @@ export async function dumpBrowserCookies(browser: string): Promise<GuestCookie[]
           "--flat-playlist",
           "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         ],
-        { timeout: 15000 },
+        { timeout: 15000, windowsHide: true },
       );
     } catch (e) {
       exitError = e;

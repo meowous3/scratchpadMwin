@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  INTERCEPT_ACTIONS, EMPTY_GRANTS, validatePermissions, permissionWarnings,
+  INTERCEPT_ACTIONS, EMPTY_GRANTS, validatePermissions, permissionWarnings, fsAllowGlob,
 } from "./permissions";
 
 describe("validatePermissions", () => {
@@ -76,5 +76,18 @@ describe("catalog", () => {
   });
   it("empty grants grant nothing", () => {
     expect(EMPTY_GRANTS).toEqual({ ui: false, rawNetwork: false, intercept: [] });
+  });
+});
+
+describe("fsAllowGlob", () => {
+  it("keeps the POSIX form", () => {
+    expect(fsAllowGlob("/home/z/.config/melo/plugins/x", "linux"))
+      .toBe("/home/z/.config/melo/plugins/x/*");
+  });
+  it("uses one separator on Windows", () => {
+    expect(fsAllowGlob("C:\\Users\\Zoë Smith\\AppData\\Roaming\\melo\\plugins\\x", "win32"))
+      .toBe("C:\\Users\\Zoë Smith\\AppData\\Roaming\\melo\\plugins\\x\\*");
+    expect(fsAllowGlob("C:/Users/z/melo/plugins/x", "win32"))
+      .toBe("C:\\Users\\z\\melo\\plugins\\x\\*");
   });
 });

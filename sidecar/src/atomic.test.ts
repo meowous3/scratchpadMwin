@@ -26,7 +26,8 @@ describe("atomic writes", () => {
     expect(JSON.parse(readFileSync(p, "utf-8")).tracks).toEqual(["keep"]);
   });
 
-  it("writes 0600 by default", () => {
+  // Windows has ACLs, not mode bits; Node reports 0o666 whatever was asked
+  it.skipIf(process.platform === "win32")("writes 0600 by default", () => {
     const p = join(dir, "settings.v2.json");
     writeFileAtomic(p, "{}");
     expect(statSync(p).mode & 0o777).toBe(0o600);

@@ -119,7 +119,7 @@ export async function maybeUpdateYtdlp(): Promise<void> {
     if (age < UPDATE_INTERVAL_MS) return;
     const channel = ytdlpChannel();
     log(`[ytdlp] running scheduled self-update (${channel})`);
-    await execFileAsync(bin, ["--update-to", channel], { timeout: 120000 });
+    await execFileAsync(bin, ["--update-to", channel], { timeout: 120000, windowsHide: true });
     touch(bin);   // refresh throttle even if already current
   } catch (e) {
     log("[ytdlp] self-update failed:", String(e));
@@ -133,7 +133,7 @@ export async function updateNow(channel?: string): Promise<boolean> {
   const bin = getEnv().ytdlpPath;
   if (isPipYtdlp(bin)) return downloadYtdlp({ overwrite: true });
   try {
-    await execFileAsync(bin, ["--update-to", target], { timeout: 120000 });
+    await execFileAsync(bin, ["--update-to", target], { timeout: 120000, windowsHide: true });
     touch(bin);
     log(`[ytdlp] updated to ${target}`);
     return true;

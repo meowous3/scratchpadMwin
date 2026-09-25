@@ -8,7 +8,7 @@ import { join, dirname, resolve, sep } from "path";
 import { createInterface } from "readline";
 import { loadPluginDir, type LoadedPlugin } from "./manifest";
 import type { UiBlock, SettingsField } from "./ui-manifest";
-import { EMPTY_GRANTS, INTERCEPT_ACTIONS, type PluginGrants, type PluginPermissions } from "./permissions";
+import { EMPTY_GRANTS, INTERCEPT_ACTIONS, fsAllowGlob, type PluginGrants, type PluginPermissions } from "./permissions";
 import { GESTURE_IDS, type CommandDecl } from "./commands";
 import { log } from "../rpc";
 
@@ -130,10 +130,10 @@ function spawnPlugin(id: string): void {
   // host bundle dir. Writes: the data dir only.
   const p = spawn(process.execPath,
     ["--permission",
-     `--allow-fs-read=${rt.loaded.dir}/*`,
-     `--allow-fs-read=${dataDir}/*`,
-     `--allow-fs-read=${distDir}/*`,
-     `--allow-fs-write=${dataDir}/*`,
+     `--allow-fs-read=${fsAllowGlob(rt.loaded.dir)}`,
+     `--allow-fs-read=${fsAllowGlob(dataDir)}`,
+     `--allow-fs-read=${fsAllowGlob(distDir)}`,
+     `--allow-fs-write=${fsAllowGlob(dataDir)}`,
      cfg.hostPath, rt.loaded.dir, dataDir, JSON.stringify(rt.grants)],
     { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   rt.proc = p;

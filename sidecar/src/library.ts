@@ -214,7 +214,7 @@ async function doDownload(videoId: string, cookieArgsFn: () => Promise<string[]>
         "--no-playlist",
         `https://www.youtube.com/watch?v=${videoId}`,
       ],
-      { timeout: 120000 },
+      { timeout: 120000, windowsHide: true },
     );
 
     // Find the downloaded file (extension is determined by yt-dlp)

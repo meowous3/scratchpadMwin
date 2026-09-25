@@ -5,6 +5,7 @@ import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { createInterface } from "readline";
+import { fsAllowGlob } from "./permissions";
 
 const HOST = resolve(__dirname, "../../dist/melo-plugin-host.mjs");
 const FIXTURE = resolve(__dirname, "../../test-fixtures/sample-source");
@@ -21,11 +22,12 @@ function startHost(dir = FIXTURE, grantsJson?: string) {
   // access to files inside a dir, not just the dir entry itself.
   const dist = resolve(__dirname, "../../dist");
   const argv = ["--permission",
-     `--allow-fs-read=${FX}/*`, `--allow-fs-read=${dataDir}/*`, `--allow-fs-read=${dist}/*`,
-     `--allow-fs-write=${dataDir}/*`, HOST, FX, dataDir];
+     `--allow-fs-read=${fsAllowGlob(FX)}`, `--allow-fs-read=${fsAllowGlob(dataDir)}`,
+     `--allow-fs-read=${fsAllowGlob(dist)}`, `--allow-fs-write=${fsAllowGlob(dataDir)}`,
+     HOST, FX, dataDir];
   if (grantsJson !== undefined) argv.push(grantsJson);
   const p = spawn(process.execPath, argv,
-    { stdio: ["pipe", "pipe", "pipe"] });
+    { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   procs.push(p);
   const lines: any[] = [];
   const waiters: ((m: any) => void)[] = [];

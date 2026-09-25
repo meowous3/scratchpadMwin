@@ -89,11 +89,13 @@ async function detectSilenceUncached(
         timeout: 10000 + scanStart * 500,
         maxBuffer: 10 * 1024 * 1024,
         encoding: "buffer",
+        windowsHide: true,
       }),
       execFileAsync(ffmpeg, ["-sseof", `-${scanEnd}`, "-i", input, ...ffmpegBase], {
         timeout: 10000 + scanEnd * 500,
         maxBuffer: 10 * 1024 * 1024,
         encoding: "buffer",
+        windowsHide: true,
       }),
     ]);
 
