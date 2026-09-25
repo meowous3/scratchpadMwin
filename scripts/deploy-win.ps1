@@ -24,6 +24,9 @@ Copy-Item "$Build\melo.exe" $Out
 & windeployqt --release --no-translations --no-system-d3d-compiler `
   --qmldir "$Root\src\qml" "$Out\melo.exe"
 if ($LASTEXITCODE) { throw "windeployqt failed" }
+# offscreen platform plugin: headless runs (CI's packaged smoke) use it
+$qtPlugins = Join-Path (Split-Path (Get-Command windeployqt).Source) "..\plugins"
+Copy-Item -Force "$qtPlugins\platforms\qoffscreen.dll" "$Out\platforms"
 
 # MSVC C++ runtime, app-local: GStreamer's bin\ carries none, and a clean PC
 # may not have the VC++ redistributable installed
@@ -84,7 +87,7 @@ $have = @{}
 Get-ChildItem $Out -File -Filter *.dll | ForEach-Object { $have[$_.Name.ToLower()] = $true }
 $missing = @{}
 $bins = @(Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.exe', '.dll' }) +
-        @(Get-ChildItem "$Out\gst-plugins", "$Out\gio-modules" -File -Filter *.dll)
+        @(Get-ChildItem "$Out\gst-plugins", "$Out\gio-modules", "$Out\platforms" -File -Filter *.dll)
 foreach ($b in $bins) {
   $deps = & dumpbin /nologo /dependents $b.FullName | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } |
     ForEach-Object { $_.Trim().ToLower() }
