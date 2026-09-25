@@ -1,32 +1,16 @@
-// Windows backend for WindowController: a compile-only stub. Every op is a
-// safe no-op; kwinAvailable() is false,
-// so QML uses its non-KWin fallbacks (client-side opacity swap, no blur).
+// Windows backend for WindowController. Compositor features are no-ops until Milestone 2; input masks, clipboard and logging are shared (WindowController_common.cpp).
 #include "WindowController.h"
 #include <QGuiApplication>
 #include <QQuickWindow>
 
-void WindowController::initFocusTracking() {
-    appActive_ = QGuiApplication::focusWindow() != nullptr;
-    QObject::connect(qGuiApp, &QGuiApplication::focusWindowChanged, this,
-                     [this](QWindow* w) {
-        const bool a = w != nullptr;
-        if (a == appActive_) return;
-        appActive_ = a;
-        emit appActiveChanged();
-    });
-}
-
 WindowController::WindowController(QObject* parent) : QObject(parent) { initFocusTracking(); }
 WindowController::~WindowController() = default;
 
-void WindowController::setInputEnabled(QQuickWindow*, bool) {}
 void WindowController::setBlurBehind(QQuickWindow*, bool) {}
 void WindowController::setBlurRegion(QQuickWindow*, int, int, int, int) {}
-void WindowController::setBackgroundContrast(QQuickWindow*, bool, double, double, double,
-                                             const QColor&) {}
+void WindowController::setBackgroundContrast(QQuickWindow*, bool, double, double) {}
 bool WindowController::blurAvailable() const { return false; }
 bool WindowController::contrastAvailable() const { return false; }
-void WindowController::setInputRegion(QQuickWindow*, int, int, int, int) {}
 bool WindowController::alignForCollapse(int) { return false; }
 bool WindowController::alignForExpand(int, int) { return false; }
 bool WindowController::setWindowOpacities(const QVariantList&) { return false; }
@@ -35,6 +19,9 @@ bool WindowController::setWindowOpacities(const QVariantList&) { return false; }
 bool WindowController::moveWindows(const QVariantList&) { return false; }
 bool WindowController::setKeepAbove(bool) { return false; }
 bool WindowController::setMiniQueueGlue(bool) { return false; }
+// false: melo's windows are not minimized away from plugin windows here —
+// Windows keeps an owned window's visibility tied to its owner (Milestone 2).
+bool WindowController::setPluginWindowsAlwaysUp(const QStringList&, bool) { return false; }
 bool WindowController::setPluginWindowGlue(const QVariantList&) { return false; }
 void WindowController::watchMainGeometry() {}
 // false: nothing to watch FOR. A user drag on this platform arrives as

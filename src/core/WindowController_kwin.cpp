@@ -59,17 +59,6 @@ private:
 #include <KWindowEffects>
 #endif
 
-void WindowController::initFocusTracking() {
-    appActive_ = QGuiApplication::focusWindow() != nullptr;
-    QObject::connect(qGuiApp, &QGuiApplication::focusWindowChanged, this,
-                     [this](QWindow* w) {
-        const bool a = w != nullptr;
-        if (a == appActive_) return;
-        appActive_ = a;
-        emit appActiveChanged();
-    });
-}
-
 WindowController::WindowController(QObject* parent) : QObject(parent) {
     initFocusTracking();
     isWayland_ = QGuiApplication::platformName().contains("wayland");
@@ -143,22 +132,6 @@ WindowController::~WindowController() {
     unload(winWatchScriptId_, winWatchScriptPath_, winWatchScriptName_);
     unload(pluginGlueScriptId_, pluginGlueScriptPath_, pluginGlueScriptName_);
     unload(glueScriptId_, glueScriptPath_, glueScriptName_);
-}
-
-void WindowController::setInputEnabled(QQuickWindow* win, bool enabled) {
-    if (!win) return;
-    // Input back is the window's SHAPE (WindowShapeItem keeps it on the
-    // window), not the whole rectangle, which a null QRegion is; a region
-    // fully off the surface makes every pixel click-through.
-    win->setProperty("meloInputOff", !enabled);
-    win->setMask(enabled ? win->property("meloShape").value<QRegion>() : QRegion(-100, -100, 1, 1));
-}
-
-void WindowController::setInputRegion(QQuickWindow* win, int x, int y, int w, int h) {
-    if (!win) return;
-    // a region of the caller's own, which a shape change must not replace
-    win->setProperty("meloInputOff", true);
-    win->setMask(QRegion(x, y, w, h));
 }
 
 // A rounded-rect region so the blur follows the window's rounded corners
@@ -238,15 +211,6 @@ void WindowController::setBackgroundContrast(QQuickWindow*, bool, double, double
 bool WindowController::blurAvailable() const { return false; }
 bool WindowController::contrastAvailable() const { return false; }
 #endif
-
-void WindowController::logLine(const QString& text) {
-    std::fprintf(stderr, "%s\n", text.toUtf8().constData());
-    std::fflush(stderr);
-}
-
-void WindowController::copyToClipboard(const QString& text) {
-    if (auto* cb = QGuiApplication::clipboard()) cb->setText(text);
-}
 
 // Run a KWin script. Unique path AND unique name per call: KWin keys its
 // registry on the NAME (see kwinScriptName), so reusing one is a silent -1.

@@ -155,9 +155,9 @@ if(WIN32)
 endif()
 
 if(WIN32)
-    set(MELO_WINDOWCTL src/core/WindowController_win.cpp)
+    set(MELO_WINDOWCTL src/core/WindowController_common.cpp src/core/WindowController_win.cpp)
 else()
-    set(MELO_WINDOWCTL src/core/WindowController_kwin.cpp)
+    set(MELO_WINDOWCTL src/core/WindowController_common.cpp src/core/WindowController_kwin.cpp)
 endif()
 
 qt_add_executable(melo
