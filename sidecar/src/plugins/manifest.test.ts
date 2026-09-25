@@ -300,8 +300,9 @@ describe("loadPluginDir", () => {
     writeFileSync(join(dir, "other/shared.js"), "eval('y')");
     write(good);
     const joined = loadPluginDir(dir).warnings.join(" ");
-    expect(joined).toMatch(/vendor\/deep\/shared\.js: uses eval/);
-    expect(joined).toMatch(/other\/shared\.js: uses eval/);
+    // Native separators: the user opens this path in their own file manager
+    expect(joined).toContain(`${join("vendor", "deep", "shared.js")}: uses eval`);
+    expect(joined).toContain(`${join("other", "shared.js")}: uses eval`);
   });
   // entry.qml is the root of the declared windows, so with no ui block it names
   // QML nothing would mount — and the QML host would load it in-process with no
