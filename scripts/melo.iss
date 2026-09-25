@@ -1,14 +1,20 @@
 ; Inno Setup script for melo — LZMA2/max compression installer.
 ; Built in CI: iscc /O<outdir> scripts/melo.iss (dist/ prepared by the deploy step)
+#ifndef AppVersion
+  #define AppVersion "0.1.0"
+#endif
+
 [Setup]
+; fixed, so a newer installer upgrades the old install in place
+AppId={{54490D21-C3EC-42E2-8B30-D6314E8FA569}
 AppName=melo
-AppVersion=0.1.0
+AppVersion={#AppVersion}
 AppPublisher=melo
 DefaultDirName={autopf}\melo
 DisableProgramGroupPage=yes
 Compression=lzma2/max
 SolidCompression=yes
-OutputBaseFilename=melo-setup
+OutputBaseFilename=melo-setup-win64
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequiredOverridesAllowed=dialog

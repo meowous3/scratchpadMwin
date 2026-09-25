@@ -208,3 +208,68 @@ jobs:
           if (-not (Select-String -Quiet -SimpleMatch '[melo] ui ready' "$env:RUNNER_TEMP\smoke.log")) {
             throw "the window never finished loading" }
           if ($p.ExitCode -ne 0) { throw "QML errors on startup (exit $($p.ExitCode))" }
+
+      - name: Deploy
+        run: ./scripts/deploy-win.ps1
+
+      # the packaged layout, with nothing from the build tree: proves the
+      # beside-melo.exe lookups for QML, node, the sidecar and GStreamer.
+      # C:\gstreamer is renamed for the step so a system GStreamer can't
+      # satisfy anything; gst-registry.bin in the config dir proves main.cpp's
+      # GStreamer environment took effect.
+      - name: Packaged build starts
+        run: |
+          $cfg = "$env:RUNNER_TEMP\melo-packaged"
+          New-Item -ItemType Directory -Force $cfg | Out-Null
+          $env:MELO_CONFIG_DIR = $cfg
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          # hide the build machine's tools so only dist\ can satisfy lookups
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Rename-Item 'C:\gstreamer' 'C:\gstreamer-hidden'
+          try {
+            $p = Start-Process -Wait -PassThru -NoNewWindow dist\melo.exe -ArgumentList '--smoke' `
+                   -RedirectStandardError "$env:RUNNER_TEMP\packaged.log"
+          } finally {
+            Rename-Item 'C:\gstreamer-hidden' 'C:\gstreamer'
+          }
+          $log = Get-Content -Raw "$env:RUNNER_TEMP\packaged.log"
+          $log
+          if ($log -notmatch '\[melo\] ui ready') { throw "packaged UI did not load" }
+          if ($log -notmatch '\[sidecar\]') { throw "packaged sidecar did not start" }
+          if ($log -match 'missing GStreamer elements') { throw "packaged GStreamer incomplete" }
+          if ($p.ExitCode -ne 0) { throw "QML errors on startup (exit $($p.ExitCode))" }
+          if (-not (Test-Path "$cfg\gst-registry.bin")) { throw "no gst-registry.bin in ${cfg}: bundled GStreamer environment not applied" }
+          "gst-registry.bin present: $((Get-Item "$cfg\gst-registry.bin").Length) bytes"
+
+      - name: Installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE) { throw "innosetup install failed" }
+          }
+          $ver = (Select-String -Path CMakeLists.txt -Pattern 'project\(melo VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          & $iscc "/DAppVersion=$ver" /Odist-installer scripts\melo.iss
+          if ($LASTEXITCODE) { throw "iscc failed" }
+          "installer: $([math]::Round((Get-Item dist-installer\melo-setup-win64.exe).Length / 1MB, 1)) MB"
+
+      - name: Portable zip
+        run: |
+          New-Item -ItemType Directory -Force portable | Out-Null
+          Robocopy dist portable\melo /E /NFL /NDL /NJH /NJS /NP | Out-Null
+          if ($LASTEXITCODE -ge 8) { throw "copy failed" }
+          New-Item -ItemType File portable\melo\portable | Out-Null
+          Compress-Archive -Path portable\melo -DestinationPath melo-portable-win64.zip
+          $global:LASTEXITCODE = 0
+          "portable zip: $([math]::Round((Get-Item melo-portable-win64.zip).Length / 1MB, 1)) MB"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: melo-setup-win64
+          path: dist-installer/melo-setup-win64.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v5
+        with:
+          name: melo-portable-win64
+          path: melo-portable-win64.zip
+          if-no-files-found: error
