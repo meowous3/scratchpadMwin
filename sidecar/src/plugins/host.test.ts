@@ -120,4 +120,33 @@ describe("plugin host", () => {
     expect(m.params.error).not.toMatch(/REACHED/);
     expect(m.params.error).toMatch(/getBuiltinModule is not a function/);
   }, 20000);
+
+  // The --allow-fs-* flags built by fsAllowGlob must grant the plugin's own
+  // folder and nothing beside it: a too-broad Windows form would fail open.
+  it("lets a plugin read inside its folder and denies a sibling folder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "melo-fsperm-"));
+    const outside = mkdtempSync(join(tmpdir(), "melo-fsperm-out-"));
+    const inFile = join(dir, "inside.txt");
+    const outFile = join(outside, "outside.txt");
+    writeFileSync(inFile, "in");
+    writeFileSync(outFile, "out");
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+      id: "fsperm", name: "FS Perm", version: "1.0.0", apiVersion: 3,
+      capabilities: ["source"], entry: { sidecar: "main.js" },
+    }));
+    writeFileSync(join(dir, "main.js"),
+      "import { readFileSync } from 'fs';\n"
+      + "const probe = (f) => { try { return 'read:' + readFileSync(f, 'utf8'); }\n"
+      + "                      catch (e) { return 'error:' + e.code; } };\n"
+      + "export default async function activate() {\n"
+      + `  throw new Error('REPORT ' + JSON.stringify({ inside: probe(${JSON.stringify(inFile)}),\n`
+      + `                                             outside: probe(${JSON.stringify(outFile)}) }));\n`
+      + "}\n");
+    const h = startHost(dir);
+    const m = await h.next();
+    expect(m.method).toBe("fatal");
+    const report = JSON.parse(/REPORT (\{.*\})/.exec(m.params.error)![1]);
+    expect(report.inside).toBe("read:in");
+    expect(report.outside).toBe("error:ERR_ACCESS_DENIED");
+  }, 20000);
 });

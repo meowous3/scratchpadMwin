@@ -5,8 +5,19 @@ import { join } from "node:path";
 // Node is a console program started by a GUI app on Windows: every child it
 // spawns without windowsHide flashes a console window. Guard every call site.
 const SRC = join(__dirname);
-const CALL = /\b(execFileAsync|execFile|spawn)\(/g;
+// Not preceded by "." or a word char: regex.exec( is not a child process, and
+// promisify(execFile) has no "(" after the name.
+const CALL = /(?<![.\w])(execFileAsync|execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\(/g;
 
+function sources(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return sources(p);
+    return e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") ? [p] : [];
+  });
+}
+
+// Counts every paren, including ones inside strings and comments.
 function callText(src: string, start: number): string {
   let depth = 0;
   for (let i = start; i < src.length; i++) {
@@ -17,10 +28,7 @@ function callText(src: string, start: number): string {
 }
 
 describe("child processes", () => {
-  const files = [
-    ...readdirSync(SRC).map((f) => join(SRC, f)),
-    ...readdirSync(join(SRC, "plugins")).map((f) => join(SRC, "plugins", f)),
-  ].filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+  const files = sources(SRC);
 
   it("all set windowsHide", () => {
     const missing: string[] = [];

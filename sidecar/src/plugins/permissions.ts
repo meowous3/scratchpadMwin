@@ -88,7 +88,8 @@ export function permissionWarnings(p: {
 
 /** Node --permission value for "everything inside dir" (the trailing-star
  *  directory-contents form). Windows gets one separator throughout; the
- *  POSIX string is unchanged. */
+ *  POSIX string is unchanged. Node >= 23 dropped "*" wildcards in
+ *  --allow-fs-*: a bundled-Node upgrade must switch to plain directory paths. */
 export function fsAllowGlob(dir: string, platform: NodeJS.Platform = process.platform): string {
   return platform === "win32" ? win32.join(dir, "*") : `${dir}/*`;
 }
