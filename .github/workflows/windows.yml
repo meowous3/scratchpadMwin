@@ -59,8 +59,10 @@ jobs:
           key: qt-${{ env.QT_VERSION }}-msvc2022_64-v1
       - name: Install Qt
         if: steps.qt-cache.outputs.cache-hit != 'true'
+        # aqtinstall 3.3.0 predates Qt 6.11's split Windows repo layout
+        # (qt6_6112_msvc2022_64/); miurahr/aqtinstall#1000 fixes it, unreleased
         run: |
-          python -m pip install 'aqtinstall==3.2.*'
+          python -m pip install 'aqtinstall @ git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
           aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 `
             -m qtshadertools qt5compat qtimageformats -O "$env:GITHUB_WORKSPACE\Qt"
       - name: Put Qt on the path
