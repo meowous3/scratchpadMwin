@@ -769,6 +769,12 @@ if(Qt6Test_FOUND)
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test ZLIB::ZLIB)
     add_dependencies(tst_plugincontainment melo_plugin_imports)
     add_test(NAME plugincontainment COMMAND tst_plugincontainment)
+    add_test(NAME pluginimports-copy
+             COMMAND ${CMAKE_COMMAND}
+                     -DQT_QML_DIR=${MELO_QT_QML_DIR}
+                     -DOUT_DIR=${CMAKE_BINARY_DIR}/plugin-qml-imports-copytest
+                     -DGENERATOR=${CMAKE_CURRENT_SOURCE_DIR}/cmake/GeneratePluginImports.cmake
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/tst_pluginimports_copy.cmake)
 
     # Content fidelity + containment for the queue view a plugin is handed.
     # MeloUiQueueView has its own translation unit precisely so this links

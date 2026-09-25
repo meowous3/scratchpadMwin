@@ -9,6 +9,24 @@
 # Inputs: QT_QML_DIR, OUT_DIR
 file(REMOVE_RECURSE "${OUT_DIR}")
 
+# Windows lets only an elevated user or Developer Mode create symlinks; copy
+# instead when linking fails. MELO_FORCE_COPY (tests) takes the copy path
+# everywhere. A copied directory holds the same files the link would show.
+function(_melo_link src dst)
+    if(NOT MELO_FORCE_COPY)
+        file(CREATE_LINK "${src}" "${dst}" RESULT _melo_rc SYMBOLIC)
+        if(_melo_rc EQUAL 0)
+            return()
+        endif()
+    endif()
+    if(IS_DIRECTORY "${src}")
+        file(MAKE_DIRECTORY "${dst}")
+        file(COPY "${src}/" DESTINATION "${dst}")
+    else()
+        file(COPY_FILE "${src}" "${dst}")
+    endif()
+endfunction()
+
 # The curated modules: real directories we own, holding the base module's
 # files and the named submodules only.
 # QtQml/Models and WorkerScript are linked because QtQml's qmldir declares them
@@ -26,7 +44,7 @@ foreach(mod ${_melo_modules})
     file(MAKE_DIRECTORY "${OUT_DIR}/${mod}")
     # Guard before anything is written INTO the module dir: it must be a real
     # directory we own. If a future edit ever links the whole module instead,
-    # every CREATE_LINK below resolves THROUGH that symlink and writes into the
+    # every link below resolves THROUGH that symlink and writes into the
     # real Qt installation, corrupting the developer's Qt instead of failing.
     if(NOT IS_DIRECTORY "${OUT_DIR}/${mod}" OR IS_SYMLINK "${OUT_DIR}/${mod}")
         message(FATAL_ERROR "plugin import dir: ${OUT_DIR}/${mod} is not a real directory — links would be written into the Qt installation at ${QT_QML_DIR}")
@@ -36,7 +54,7 @@ foreach(mod ${_melo_modules})
     file(GLOB _files LIST_DIRECTORIES false "${QT_QML_DIR}/${mod}/*")
     foreach(f ${_files})
         get_filename_component(_n "${f}" NAME)
-        file(CREATE_LINK "${f}" "${OUT_DIR}/${mod}/${_n}" SYMBOLIC)
+        _melo_link("${f}" "${OUT_DIR}/${mod}/${_n}")
     endforeach()
 
     # Also link the submodules the module's own qmldir auto-imports. Qt 6.7
@@ -71,7 +89,7 @@ foreach(mod ${_melo_modules})
     # explicitly allowed submodules, one at a time
     foreach(sub ${_melo_subs})
         if(EXISTS "${QT_QML_DIR}/${mod}/${sub}")
-            file(CREATE_LINK "${QT_QML_DIR}/${mod}/${sub}" "${OUT_DIR}/${mod}/${sub}" SYMBOLIC)
+            _melo_link("${QT_QML_DIR}/${mod}/${sub}" "${OUT_DIR}/${mod}/${sub}")
         else()
             # Plugin QML importing a missing submodule would otherwise fail
             # only at runtime.
