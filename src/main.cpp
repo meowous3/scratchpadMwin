@@ -26,6 +26,7 @@
 #include <QDBusInterface>
 #endif
 #include <QFileInfo>
+#include <QFile>
 #include <cstdio>
 #include <gst/gst.h>
 #ifdef Q_OS_WIN
@@ -214,10 +215,43 @@ int main(int argc, char** argv) {
         wchar_t exePath[MAX_PATH];
         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
         const QString exeDir = QFileInfo(QString::fromWCharArray(exePath)).absolutePath();
-        if (QDir(exeDir + "/gst-plugins").exists())
+        if (QDir(exeDir + "/gst-plugins").exists()) {
             qputenv("GST_PLUGIN_PATH", QDir::toNativeSeparators(exeDir + "/gst-plugins").toLocal8Bit());
+            // Only the bundled plugins: a system-wide GStreamer of another
+            // version would otherwise load into the same process.
+            qputenv("GST_PLUGIN_SYSTEM_PATH_1_0", "");
+        }
+        if (QFileInfo::exists(exeDir + "/gst-plugin-scanner.exe"))
+            qputenv("GST_PLUGIN_SCANNER",
+                    QDir::toNativeSeparators(exeDir + "/gst-plugin-scanner.exe").toLocal8Bit());
         if (QDir(exeDir + "/gio-modules").exists())
             qputenv("GIO_EXTRA_MODULES", QDir::toNativeSeparators(exeDir + "/gio-modules").toLocal8Bit());
+
+        // The config dir must be writable: settings, library and the log
+        // below live there. A portable folder under Program Files is not.
+        const QString cfg = meloConfigDirFrom(exeDir);
+        QDir().mkpath(cfg);
+        QFile probe(cfg + "/.melo-write-test");
+        if (!probe.open(QIODevice::WriteOnly)) {
+            const std::wstring msg = L"melo can't write to "
+                + QDir::toNativeSeparators(cfg).toStdWString()
+                + L"\n\nMove the melo folder somewhere you can write to, such as Documents.";
+            MessageBoxW(nullptr, msg.c_str(), L"melo", MB_ICONERROR);
+            return 1;
+        }
+        probe.close();
+        probe.remove();
+
+        // GUI subsystem: stderr goes nowhere unless the launcher redirected
+        // it (CI does). Otherwise keep the last run in <config>/melo.log.
+        const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+        if (err == nullptr || err == INVALID_HANDLE_VALUE) {
+            if (_wfreopen((cfg + "/melo.log").toStdWString().c_str(), L"w", stderr))
+                setvbuf(stderr, nullptr, _IONBF, 0);
+        }
+        // Qt writes to the debugger (OutputDebugString) in a GUI app without this
+        if (!qEnvironmentVariableIsSet("QT_FORCE_STDERR_LOGGING"))
+            qputenv("QT_FORCE_STDERR_LOGGING", "1");
     }
     // Qt's default Controls style on Linux is Fusion; on Windows it is the
     // native "Windows" style, which rejects customized contentItem/background
@@ -241,7 +275,11 @@ int main(int argc, char** argv) {
     QStringList missingGst;
     for (const char* name : {"audiomixer", "equalizer-10bands", "audioconvert",
                              "audioresample", "volume", "appsink", "uridecodebin",
-                             "typefind", "autoaudiosink", "pulsesink", "souphttpsrc", "oggdemux",
+                             "typefind", "autoaudiosink",
+#ifndef Q_OS_WIN
+                             "pulsesink",
+#endif
+                             "souphttpsrc", "oggdemux",
                              "vorbisdec", "opusdec", "mpg123audiodec",
                              "qtdemux", "matroskademux", "id3demux", "flacdec",
                              "wavparse"}) {
