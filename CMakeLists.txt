@@ -682,6 +682,11 @@ if(Qt6Test_FOUND)
     target_link_libraries(tst_jsonrowmodel PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME jsonrowmodel COMMAND tst_jsonrowmodel)
 
+    add_executable(tst_paths tests/cpp/tst_paths.cpp src/core/paths.h)
+    target_include_directories(tst_paths PRIVATE src/core)
+    target_link_libraries(tst_paths PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME paths COMMAND tst_paths)
+
     # Who gets to switch the FFT on: SpectrumSource alone, Qt6::Core only. The
     # host side of the wiring is asserted in tst_windowsnap.
     add_executable(tst_spectrumarbiter
@@ -1079,6 +1084,7 @@ if(Qt6Test_FOUND)
     # of observed runtimes; containment races a real symlink swap for 3s.
     set_tests_properties(plugincontainment PROPERTIES TIMEOUT 60)    # ~3.5s
     set_tests_properties(jsonrowmodel      PROPERTIES TIMEOUT 30)
+    set_tests_properties(paths             PROPERTIES TIMEOUT 30)
     set_tests_properties(queueview         PROPERTIES TIMEOUT 30)
     # Two rows WAIT OUT the 16ms analysis timer to observe what did or did not
     # reach the ring, so a broken build hangs in qWait rather than answering
