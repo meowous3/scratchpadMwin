@@ -51,13 +51,16 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
 
-      - name: Cache Qt
+      # restore/save split: a cache is kept as soon as its step succeeds, even
+      # when a later step fails the job
+      - name: Restore Qt
         id: qt-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}\Qt
           key: qt-${{ env.QT_VERSION }}-msvc2022_64-v1
       - name: Install Qt
+        id: qt-install
         if: steps.qt-cache.outputs.cache-hit != 'true'
         # aqtinstall 3.3.0 predates Qt 6.11's split Windows repo layout
         # (qt6_6112_msvc2022_64/); miurahr/aqtinstall#1000 fixes it, unreleased
@@ -65,6 +68,12 @@ jobs:
           python -m pip install 'aqtinstall @ git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
           aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 `
             -m qtshadertools qt5compat qtimageformats -O "$env:GITHUB_WORKSPACE\Qt"
+      - name: Save Qt
+        if: always() && steps.qt-install.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}\Qt
+          key: qt-${{ env.QT_VERSION }}-msvc2022_64-v1
       - name: Put Qt on the path
         run: |
           $qt = "$env:GITHUB_WORKSPACE\Qt\$env:QT_VERSION\msvc2022_64"
@@ -74,12 +83,14 @@ jobs:
 
       # 1.28 ships one Inno Setup installer; /TYPE=full includes the headers,
       # .pc files and pkg-config.exe the build needs
-      - name: Cache GStreamer installer
-        uses: actions/cache@v6
+      - name: Restore GStreamer installer
+        id: gst-cache
+        uses: actions/cache/restore@v6
         with:
           path: gst-installer
           key: gst-${{ env.GST_VERSION }}-msvc-x86_64
       - name: Install GStreamer
+        id: gst-install
         run: |
           $exe = "gst-installer\gstreamer-1.0-msvc-x86_64-$env:GST_VERSION.exe"
           if (-not (Test-Path $exe)) {
@@ -94,6 +105,12 @@ jobs:
           if (-not (Test-Path 'C:\gstreamer\bin\pkg-config.exe')) { throw "pkg-config.exe missing" }
           'C:\gstreamer\bin' | Out-File -Append $env:GITHUB_PATH
           'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer' | Out-File -Append $env:GITHUB_ENV
+      - name: Save GStreamer installer
+        if: always() && steps.gst-install.outcome == 'success' && steps.gst-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: gst-installer
+          key: gst-${{ env.GST_VERSION }}-msvc-x86_64
 
       - uses: pnpm/action-setup@v6
         with: { version: '${{ env.PNPM_VERSION }}' }
@@ -103,9 +120,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: sidecar/pnpm-lock.yaml
 
-      - name: Cache vendor
+      - name: Restore vendor
         id: vendor-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             vendor/projectm4
@@ -114,6 +131,7 @@ jobs:
           key: vendor-win-${{ hashFiles('scripts/setup-vendor-win.ps1', 'scripts/build-ffmpeg.sh', 'scripts/fetch-presets.sh', 'patches/projectm-caller-fbo.patch') }}
 
       - name: projectM
+        id: projectm
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install glew:x64-windows glm:x64-windows
           if ($LASTEXITCODE) { throw "vcpkg failed" }
@@ -132,6 +150,7 @@ jobs:
           path-type: inherit
           install: make diffutils tar xz
       - name: ffmpeg
+        id: ffmpeg
         if: steps.vendor-cache.outputs.cache-hit != 'true'
         shell: msys2 {0}
         run: |
@@ -139,10 +158,27 @@ jobs:
           rm -f /usr/bin/link.exe
           bash scripts/build-ffmpeg.sh
           test -f vendor/ffmpeg/bin/ffmpeg.exe
+      - name: ffmpeg config.log
+        if: failure() && steps.ffmpeg.outcome == 'failure'
+        shell: bash
+        run: tail -80 vendor/ffmpeg-src/ffmpeg-7.1.1/ffbuild/config.log || true
       - name: Presets
+        id: presets
         if: steps.vendor-cache.outputs.cache-hit != 'true'
         shell: bash
         run: bash scripts/fetch-presets.sh
+      - name: Save vendor
+        if: >-
+          always() && steps.vendor-cache.outputs.cache-hit != 'true'
+          && steps.projectm.outcome == 'success' && steps.ffmpeg.outcome == 'success'
+          && steps.presets.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            vendor/projectm4
+            vendor/ffmpeg
+            vendor/presets
+          key: vendor-win-${{ hashFiles('scripts/setup-vendor-win.ps1', 'scripts/build-ffmpeg.sh', 'scripts/fetch-presets.sh', 'patches/projectm-caller-fbo.patch') }}
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
