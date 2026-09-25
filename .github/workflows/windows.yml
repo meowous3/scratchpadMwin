@@ -185,7 +185,37 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
+        id: build
         run: cmake --build build -- -k 0
+
+      - name: DIAG colorpicker
+        if: always() && steps.build.outcome == 'success'
+        continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          Remove-Item Env:QT_FATAL_WARNINGS -ErrorAction SilentlyContinue
+          $t = "tests\qml\tst_colorpicker.qml"
+          $r = (Get-Command qmltestrunner.exe).Source
+          "runner=$r"
+          "=== full run -v2 (to file) ==="
+          & $r -input $t -o "$env:RUNNER_TEMP\cp.txt,txt" -v2 2>&1 | Out-String | Write-Output
+          "exit=$LASTEXITCODE"
+          Get-Content "$env:RUNNER_TEMP\cp.txt" -ErrorAction SilentlyContinue | Select-Object -Last 80
+          "=== functions ==="
+          $fns = & $r -input $t -functions 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match '^\S+::\S+\(\)' } | ForEach-Object { $_ -replace '\(\)$','' }
+          $fns
+          "=== one at a time ==="
+          foreach ($f in $fns) {
+            $o = & $r -input $t $f 2>&1 | Out-String
+            $c = $LASTEXITCODE
+            "{0} exit={1}" -f $f, $c
+            if ($c -ne 0) { ($o -split "`n") | Select-Object -Last 15 }
+          }
+          "=== under cdb ==="
+          $cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
+          & $cdb -g -G -o -c ".symfix;.lastevent;.ecxr;kn 80;~*kn 20;q" $r -input $t 2>&1 | Select-Object -Last 400
+          "cdb exit=$LASTEXITCODE"
 
       - name: Tests
         env:
@@ -195,6 +225,7 @@ jobs:
       # --smoke exits 3 on any QML diagnostic during startup. melo.exe is a GUI
       # app, so stderr only reaches us through an explicit redirect.
       - name: Starts with no QML errors
+        if: always() && steps.build.outcome == 'success'
         run: |
           $cfg = "$env:RUNNER_TEMP\melo-ci"
           New-Item -ItemType Directory -Force $cfg | Out-Null
