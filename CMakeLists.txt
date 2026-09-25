@@ -224,7 +224,7 @@ qt_add_executable(melo
     src/plugins/SkinImageProvider.h
 )
 if(WIN32)
-    target_sources(melo PRIVATE src/core/PortalDialog_win.cpp)
+    target_sources(melo PRIVATE src/core/PortalDialog.h src/core/PortalDialog_win.cpp)
     target_link_libraries(melo PRIVATE ole32 shell32)
 else()
     target_sources(melo PRIVATE src/core/MprisService.cpp src/core/PortalDialog.cpp)
