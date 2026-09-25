@@ -11,7 +11,7 @@ $Src = "$Vendor/projectm-src"
 $PmVer = "v4.1.7"
 
 if (Test-Path "$Prefix/lib/cmake/projectM4/projectM4Config.cmake") {
-  Write-Host "projectM already built at $Prefix — skipping."
+  Write-Host "projectM already built at $Prefix - skipping."
   exit 0
 }
 
@@ -25,7 +25,7 @@ if (-not (Test-Path $Src)) {
 }
 
 Push-Location $Src
-# caller-bound FBO patch — required for QQuickFramebufferObject embedding.
+# caller-bound FBO patch - required for QQuickFramebufferObject embedding.
 # melo's own checkout may have CRLF line endings, so apply an LF copy.
 $Patch = Join-Path ([IO.Path]::GetTempPath()) "projectm-caller-fbo.patch"
 $text = [IO.File]::ReadAllText("$Root/patches/projectm-caller-fbo.patch") -replace "`r`n", "`n"
@@ -36,7 +36,7 @@ if ($LASTEXITCODE -eq 0) {
   if ($LASTEXITCODE) { throw "git apply failed" }
   Write-Host "applied projectm-caller-fbo.patch"
 } else {
-  Write-Host "patch did not apply cleanly — checking whether it is already in"
+  Write-Host "patch did not apply cleanly - checking whether it is already in"
 }
 # same guard as setup-vendor.sh: an unpatched projectM renders black
 if (-not (Select-String -Quiet -SimpleMatch callerDrawFbo src/libprojectM/ProjectM.cpp)) {

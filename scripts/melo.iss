@@ -1,4 +1,4 @@
-; Inno Setup script for melo — LZMA2/max compression installer.
+; Inno Setup script for melo - LZMA2/max compression installer.
 ; Built in CI: iscc /O<outdir> scripts/melo.iss (dist/ prepared by the deploy step)
 #ifndef AppVersion
   #define AppVersion "0.1.0"
@@ -22,6 +22,15 @@ UninstallDisplayIcon={app}\melo.exe
 ; GPL-3.0 s4/s5: the licence is conveyed with the work. The installer showed
 ; none, and no file in dist\ carried one either.
 LicenseFile=..\LICENSE
+SetupIconFile=..\resources\melo.ico
+
+[InstallDelete]
+; an upgrade replaces these folders whole: files a newer build dropped must go
+Type: filesandordirs; Name: "{app}\gst-plugins"
+Type: filesandordirs; Name: "{app}\melo-qml"
+Type: filesandordirs; Name: "{app}\plugin-qml-imports"
+Type: filesandordirs; Name: "{app}\qml"
+Type: filesandordirs; Name: "{app}\sidecar"
 
 [Files]
 Source: "..\dist\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion

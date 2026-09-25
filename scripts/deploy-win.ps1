@@ -21,7 +21,9 @@ if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
 New-Item -ItemType Directory $Out | Out-Null
 
 Copy-Item "$Build\melo.exe" $Out
-& windeployqt --release --no-translations --no-system-d3d-compiler `
+# --no-compiler-runtime: the MSVC runtime is copied app-local below, so
+# vc_redist.x64.exe would only add size
+& windeployqt --release --no-translations --no-system-d3d-compiler --no-compiler-runtime `
   --qmldir "$Root\src\qml" "$Out\melo.exe"
 if ($LASTEXITCODE) { throw "windeployqt failed" }
 
@@ -53,7 +55,11 @@ Copy-Item "$GstRoot\lib\gio\modules\*.dll" "$Out\gio-modules"
 Copy-Item "$GstRoot\libexec\gstreamer-1.0\gst-plugin-scanner.exe" $Out
 
 # Node + sidecar; jsdom reads data files beside its package, so it ships unbundled
-Copy-Item (Get-Command node).Source "$Out\node.exe"
+$node = (Get-Command node).Source
+Copy-Item $node "$Out\node.exe"
+$nodeLicense = Join-Path (Split-Path $node) "LICENSE"
+if (-not (Test-Path $nodeLicense)) { throw "no LICENSE beside $node" }
+Copy-Item $nodeLicense "$Out\node-LICENSE"
 New-Item -ItemType Directory "$Out\sidecar" | Out-Null
 Copy-Item "$Root\sidecar\dist\melo-sidecar.mjs", "$Root\sidecar\dist\melo-plugin-host.mjs" "$Out\sidecar"
 $jsdom = (Get-Content "$Root\sidecar\node_modules\jsdom\package.json" | ConvertFrom-Json).version
@@ -83,14 +89,20 @@ Robo "$Root\LICENSES" "$Out\LICENSES"
 $have = @{}
 Get-ChildItem $Out -File -Filter *.dll | ForEach-Object { $have[$_.Name.ToLower()] = $true }
 $missing = @{}
-$bins = @(Get-ChildItem $Out -File | Where-Object { $_.Extension -in '.exe', '.dll' }) +
-        @(Get-ChildItem "$Out\gst-plugins", "$Out\gio-modules" -File -Filter *.dll)
+# every binary except node's packages; Qt's qml\ and platform plugins included
+$sidecarDir = (Resolve-Path "$Out\sidecar").Path + '\'
+$bins = @(Get-ChildItem $Out -Recurse -File | Where-Object {
+  $_.Extension -in '.exe', '.dll' -and -not $_.FullName.StartsWith($sidecarDir, [StringComparison]::OrdinalIgnoreCase) })
+# the VC++ runtime families: a System32 copy exists only where some installer
+# put one, so a clean PC may lack it
+$redist = 'msvcr*', 'msvcp*', 'vcruntime*', 'vcomp*', 'concrt*', 'mfc*', 'ucrtbased*'
 foreach ($b in $bins) {
   $deps = & dumpbin /nologo /dependents $b.FullName | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } |
     ForEach-Object { $_.Trim().ToLower() }
   foreach ($d in $deps) {
     if ($d -like 'api-ms-win-*' -or $d -like 'ext-ms-*' -or $have[$d]) { continue }
-    if (Test-Path "$env:SystemRoot\System32\$d") { continue }
+    $isRedist = @($redist | Where-Object { $d -like $_ }).Count -gt 0
+    if (-not $isRedist -and (Test-Path "$env:SystemRoot\System32\$d")) { continue }
     $where = @(& where.exe $d 2>$null) + @(Get-ChildItem $GstRoot -Recurse -File -Filter $d -ErrorAction SilentlyContinue | ForEach-Object FullName)
     $global:LASTEXITCODE = 0
     $missing["$d (needed by $($b.Name); found at: $($where -join ', '))"] = $true
@@ -100,7 +112,16 @@ if ($missing.Count) { throw "dist is missing DLLs:`n  $($missing.Keys -join "`n 
 
 foreach ($f in 'melo.exe', 'node.exe', 'ffmpeg.exe', 'gst-plugin-scanner.exe', 'vcruntime140.dll',
                'sidecar\melo-sidecar.mjs', 'melo-qml\Main.qml',
-               'plugin-qml-imports\QtQuick\qmldir', 'gst-plugins\gstwasapi2.dll') {
+               'plugin-qml-imports\QtQuick\qmldir', 'gst-plugins\gstwasapi2.dll', 'node-LICENSE') {
   if (-not (Test-Path "$Out\$f")) { throw "dist is missing $f" }
 }
+# the qsb shaders are build outputs written into src\qml\components, so a
+# deploy from a tree that never built them ships QML that can't draw
+if (-not (Get-ChildItem "$Out\melo-qml" -Recurse -File -Filter *.qsb | Select-Object -First 1)) {
+  throw "dist is missing melo-qml\**\*.qsb" }
+if (-not (Get-ChildItem "$Out\presets" -Recurse -File -Filter *.milk | Select-Object -First 1)) {
+  throw "dist is missing presets\*.milk" }
+$platforms = @(Get-ChildItem "$Out\platforms" -File | ForEach-Object Name)
+if ($platforms.Count -ne 1 -or $platforms[0] -ne 'qwindows.dll') {
+  throw "dist\platforms must hold only qwindows.dll, found: $($platforms -join ', ')" }
 Write-Host "dist ready: $([math]::Round((Get-ChildItem $Out -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)) MB"

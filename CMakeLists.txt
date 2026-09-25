@@ -405,6 +405,8 @@ if(WIN32)
     target_link_libraries(melo PRIVATE user32 dwmapi)
     # GUI subsystem: no console window flashing up behind the app
     set_property(TARGET melo PROPERTY WIN32_EXECUTABLE ON)
+    # Explorer, taskbar and shortcut icon (resources/melo.ico from melo.png)
+    target_sources(melo PRIVATE resources/melo.rc)
 endif()
 
 # Glass blur: native KWin wayland protocols (WaylandBlur.cpp) — always on
@@ -654,15 +656,27 @@ if(Qt6Test_FOUND)
                                  ${MELO_QMLTESTRUNNER} ${qt_file})
             else()
                 add_test(NAME ${qt_name}
-                         COMMAND ${MELO_QMLTESTRUNNER} -input ${qt_file})
+                         COMMAND ${CMAKE_COMMAND}
+                                 -DRUNNER=${MELO_QMLTESTRUNNER} -DINPUT=${qt_file}
+                                 -DOUT=${CMAKE_BINARY_DIR}/qmltest-${qt_name}.txt
+                                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/run_qmltest.cmake)
             endif()
             set_tests_properties(${qt_name} PROPERTIES
                 ENVIRONMENT "${_melo_qml_env}")
         endforeach()
         # an SVG picture's reported size depends on the device pixel ratio
-        add_test(NAME tst_imagefills_dpr-scaled
-                 COMMAND ${MELO_QMLTESTRUNNER} -input
-                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_imagefills_dpr.qml)
+        if(WIN32)
+            add_test(NAME tst_imagefills_dpr-scaled
+                     COMMAND ${CMAKE_COMMAND}
+                             -DRUNNER=${MELO_QMLTESTRUNNER}
+                             -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_imagefills_dpr.qml
+                             -DOUT=${CMAKE_BINARY_DIR}/qmltest-tst_imagefills_dpr-scaled.txt
+                             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/run_qmltest.cmake)
+        else()
+            add_test(NAME tst_imagefills_dpr-scaled
+                     COMMAND ${MELO_QMLTESTRUNNER} -input
+                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_imagefills_dpr.qml)
+        endif()
         set_tests_properties(tst_imagefills_dpr-scaled PROPERTIES
             ENVIRONMENT "${_melo_qml_env};QT_SCALE_FACTOR=2")
     else()
